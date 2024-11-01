@@ -45,6 +45,7 @@
 #include <limits>
 #include <cstdint>
 #include <compare>
+#include <format>
 #include <vector>
 #include <list>
 #include <algorithm>
@@ -191,30 +192,17 @@ public:
 		if (!has_any())
 			_ranges[0].first = static_cast<uri_len_t>(what);
 	}
+
 	// syntactic sugar has/get
-	constexpr bool has_scheme() const noexcept { return test<scheme>(); }
-	constexpr bool has_authority() const noexcept { return test<authority>(); }
-	constexpr bool has_any_authority() const noexcept { return test_any<host,password,port,user,userinfo>(); }
-	constexpr bool has_userinfo() const noexcept { return test<userinfo>(); }
-	constexpr bool has_any_userinfo() const noexcept { return test_any<password,user>(); }
+#define df(x) \
+	constexpr bool has_##x() const noexcept { return test<x>(); } \
+	constexpr std::string_view get_##x() const noexcept { return get_component<x>(); }
+	df(scheme); df(authority); df(userinfo); df(user); df(password);
+	df(host); df(port); df(path); df(query); df(fragment);
+#undef df
 	constexpr bool has_any() const noexcept { return test<countof>(); }
-	constexpr bool has_user() const noexcept { return test<user>(); }
-	constexpr bool has_password() const noexcept { return test<password>(); }
-	constexpr bool has_host() const noexcept { return test<host>(); }
-	constexpr bool has_port() const noexcept { return test<port>(); }
-	constexpr bool has_path() const noexcept { return test<path>(); }
-	constexpr bool has_query() const noexcept { return test<query>(); }
-	constexpr bool has_fragment() const noexcept { return test<fragment>(); }
-	constexpr std::string_view get_scheme() const noexcept { return get_component<scheme>(); }
-	constexpr std::string_view get_authority() const noexcept { return get_component<authority>(); }
-	constexpr std::string_view get_userinfo() const noexcept { return get_component<userinfo>(); }
-	constexpr std::string_view get_user() const noexcept { return get_component<user>(); }
-	constexpr std::string_view get_password() const noexcept { return get_component<password>(); }
-	constexpr std::string_view get_host() const noexcept { return get_component<host>(); }
-	constexpr std::string_view get_port() const noexcept { return get_component<port>(); }
-	constexpr std::string_view get_path() const noexcept { return get_component<path>(); }
-	constexpr std::string_view get_query() const noexcept { return get_component<query>(); }
-	constexpr std::string_view get_fragment() const noexcept { return get_component<fragment>(); }
+	constexpr bool has_any_authority() const noexcept { return test_any<host,password,port,user,userinfo>(); }
+	constexpr bool has_any_userinfo() const noexcept { return test_any<password,user>(); }
 
 	constexpr int parse() noexcept
 	{
@@ -535,34 +523,6 @@ public:
 		return result;
 	}
 
-	static constexpr std::string make_edit(const auto& what, std::initializer_list<comp_pair> from)
-	{
-		basic_uri ibase;
-		comp_list ilist{countof};
-		for (component ii{}; ii != countof; ii = component(ii + 1))
-		{
-			if (what.test(ii))
-			{
-				ibase.set(ii);
-				ilist[ii] = what.get_component(ii);
-			}
-		}
-		for (const auto& [comp,str] : from)
-		{
-			if (comp < countof)
-			{
-				ibase.set(comp);
-				ilist[comp] = str;
-			}
-		}
-		if (!ibase.has_any())
-			return 0;
-		if (ibase.has_any_authority())
-			ibase.clear<authority>();
-		if (ibase.has_userinfo() && ibase.has_any_userinfo())
-			ibase.clear<userinfo>();
-		return make_uri(ibase, std::move(ilist));
-	}
 	static constexpr std::string encode_hex(std::string_view src) noexcept
 	{
 		std::string result;
@@ -618,24 +578,7 @@ public:
 	friend constexpr auto operator==(const basic_uri& lhs, const basic_uri& rhs) noexcept
 		{ return lhs._source == rhs._source; }
 
-private:
-	static constexpr bool is_reserved(char c) noexcept
-		{ return _reserved.find_first_of(c) != std::string_view::npos; }
-	static constexpr bool is_unreserved(char c) noexcept
-		{ return std::isalnum(c) || c == '-' || c == '.' || c == '_' || c == '~'; }
-	static constexpr bool is_unreserved_ascii(std::string_view src) noexcept // is %XX unreserved?
-		{ return is_unreserved(cvt_hex_octet(src[1]) << 4 | cvt_hex_octet(src[2])); }
-	static constexpr bool query_comp(const value_pair& pl, const value_pair& pr) noexcept { return pl.first < pr.first; }
-	static constexpr char cvt_hex_octet(char c) noexcept { return (c & 0xF) + (c >> 6) * 9; }
-	static constexpr std::string& decode_to(std::string& result, bool unreserved) // inplace decode
-	{
-		for (std::string_view::size_type fnd{}; ((fnd = find_hex(result, fnd))) != std::string_view::npos;)
-			if (unreserved ? is_unreserved_ascii(result.substr(fnd, 3)) : true)
-				result.replace(fnd, 3, 1, cvt_hex_octet(result[fnd + 1]) << 4 | cvt_hex_octet(result[fnd + 2]));
-			else
-				fnd += 3;
-		return result;
-	}
+protected:
 	static constexpr std::string make_uri(basic_uri ibase, comp_list ilist) noexcept
 	{
 		if (!ibase.has_any())
@@ -719,6 +662,24 @@ private:
 		}
 		return result;
 	}
+private:
+	static constexpr bool is_reserved(char c) noexcept
+		{ return _reserved.find_first_of(c) != std::string_view::npos; }
+	static constexpr bool is_unreserved(char c) noexcept
+		{ return std::isalnum(c) || c == '-' || c == '.' || c == '_' || c == '~'; }
+	static constexpr bool is_unreserved_ascii(std::string_view src) noexcept // is %XX unreserved?
+		{ return is_unreserved(cvt_hex_octet(src[1]) << 4 | cvt_hex_octet(src[2])); }
+	static constexpr bool query_comp(const value_pair& pl, const value_pair& pr) noexcept { return pl.first < pr.first; }
+	static constexpr char cvt_hex_octet(char c) noexcept { return (c & 0xF) + (c >> 6) * 9; }
+	static constexpr std::string& decode_to(std::string& result, bool unreserved) // inplace decode
+	{
+		for (std::string_view::size_type fnd{}; ((fnd = find_hex(result, fnd))) != std::string_view::npos;)
+			if (unreserved ? is_unreserved_ascii(result.substr(fnd, 3)) : true)
+				result.replace(fnd, 3, 1, cvt_hex_octet(result[fnd + 1]) << 4 | cvt_hex_octet(result[fnd + 2]));
+			else
+				fnd += 3;
+		return result;
+	}
 };
 
 //-----------------------------------------------------------------------------------------
@@ -782,9 +743,37 @@ public:
 		assign(this->buffer());
 		return oldstr;
 	}
+	constexpr std::string make_edit(std::initializer_list<comp_pair> from) noexcept
+	{
+		basic_uri ibase;
+		comp_list ilist{countof};
+		for (component ii{}; ii != countof; ii = component(ii + 1))
+		{
+			if (test(ii))
+			{
+				ibase.set(ii);
+				ilist[ii] = get_component(ii);
+			}
+		}
+		for (const auto& [comp,str] : from)
+		{
+			if (comp < countof)
+			{
+				ibase.set(comp);
+				ilist[comp] = str;
+			}
+		}
+		if (!ibase.has_any())
+			return 0;
+		if (ibase.has_any_authority())
+			ibase.clear<authority>();
+		if (ibase.has_userinfo() && ibase.has_any_userinfo())
+			ibase.clear<userinfo>();
+		return make_uri(ibase, std::move(ilist));
+	}
 	constexpr int edit(std::initializer_list<comp_pair> from) noexcept
 	{
-		replace(make_edit(*this, std::move(from)));
+		replace(make_edit(std::move(from)));
 		return count();
 	}
 	constexpr auto normalize() noexcept { return replace(normalize_str(this->get_uri())); }
@@ -792,6 +781,11 @@ public:
 
 	static constexpr auto factory(std::initializer_list<comp_pair> from) noexcept
 		{ return uri_base(make_uri(std::move(from))); }
+
+	/// format helper
+	template<typename... Args>
+	static constexpr auto format(std::format_string<Args...> fmt, Args&&... args)
+		{ return uri_base(std::vformat(fmt.get(), std::make_format_args(args...))); }
 
 	/// normalize equality
 	friend constexpr auto operator==(const uri_base& lhs, const uri_base& rhs) noexcept

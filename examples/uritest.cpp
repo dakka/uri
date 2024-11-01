@@ -202,9 +202,16 @@ int main(int argc, char *argv[])
 					const auto u4 { uri::factory({{scheme, "https"}, {user, "dakka"},
 						{host, "www.blah.com"}, {port, "3000"}, {path, "/foo/" + basic_uri::encode_hex("this path has embedded spaces") + "/test"}}) };
 					std::cout << u4 << '\n';
-					*/
 					uri_static<64> u3{tests[35].first};
 					std::cout << u3 << '\n';
+					auto u1 { uri::format("{}://{}:{}/rfc/{}", "https", "www.ietf.org", 80, "rfc2396.txt") };
+					auto u2 { uri_static<128>::format("{0}://{2}:{1}/{3}{4}{3}", "https", 80, "www.ietf.org", "abra", "cad") };
+					std::cout << u1 << '\n';
+					std::cout << u2 << '\n';
+					auto u4 { uri::format("{}://{}@{}:{}/{}/{}/{}", "https", "dakka", "www.blah.com", "3000", "foo",
+						basic_uri::encode_hex("this path has embedded spaces"), "test") };
+					std::cout << u4 << '\n';
+					*/
 				}
 				break;
 			case 'l':

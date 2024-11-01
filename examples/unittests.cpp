@@ -34,6 +34,7 @@
 #include <iostream>
 #include <unordered_set>
 #include <sstream>
+#include <format>
 #include <vector>
 #include <algorithm>
 #include <string_view>
@@ -157,7 +158,7 @@ TEST_CASE("uri component validations")
 }
 
 //-----------------------------------------------------------------------------------------
-#define testfuncs(var,x) (var.has_##x() == var.test(x) \
+#define tf(var,x) (var.has_##x() == var.test(x) \
 	&& var.get_##x() == var.get_component<x>() && var.get_##x() == var.get_component(x))
 
 TEST_CASE("uri has/get")
@@ -165,16 +166,16 @@ TEST_CASE("uri has/get")
 	for (const auto& [src,vec] : tests)
 	{
 		const basic_uri u1{src};
-		REQUIRE(testfuncs(u1, scheme));
-		REQUIRE(testfuncs(u1, authority));
-		REQUIRE(testfuncs(u1, userinfo));
-		REQUIRE(testfuncs(u1, user));
-		REQUIRE(testfuncs(u1, password));
-		REQUIRE(testfuncs(u1, host));
-		REQUIRE(testfuncs(u1, port));
-		REQUIRE(testfuncs(u1, path));
-		REQUIRE(testfuncs(u1, query));
-		REQUIRE(testfuncs(u1, fragment));
+		REQUIRE(tf(u1, scheme));
+		REQUIRE(tf(u1, authority));
+		REQUIRE(tf(u1, userinfo));
+		REQUIRE(tf(u1, user));
+		REQUIRE(tf(u1, password));
+		REQUIRE(tf(u1, host));
+		REQUIRE(tf(u1, port));
+		REQUIRE(tf(u1, path));
+		REQUIRE(tf(u1, query));
+		REQUIRE(tf(u1, fragment));
 	}
 }
 
@@ -495,6 +496,26 @@ TEST_CASE("factory")
 {
 	do_factory<uri>();
 	do_factory<uri_static<>>();
+}
+
+//-----------------------------------------------------------------------------------------
+template<typename T>
+void do_format()
+{
+	const auto u1 { T::format("{}://{}@{}:{}{}", "https", "dakka", "www.blah.com", "3000", "/") };
+	run_test_comp(3, u1);
+	const auto u2 { T::format("{}://{}", "file", "/foo/bar/test/node.js") };
+	run_test_comp(8, u2);
+	const auto u3 { T::format("{}:{}", "mailto", "John.Smith@example.com") };
+	run_test_comp(15, u3);
+	const auto u4 { uri::format("{}:{}", "file", "/foo/" + basic_uri::encode_hex("this path has embedded spaces") + "/test/node.js") };
+	REQUIRE(u4.get_path() == "/foo/this%20path%20has%20embedded%20spaces/test/node.js"sv);
+}
+
+TEST_CASE("format")
+{
+	do_format<uri>();
+	do_format<uri_static<>>();
 }
 
 //-----------------------------------------------------------------------------------------

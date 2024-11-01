@@ -991,6 +991,13 @@ static constexpr std::string make_uri(std::initializer_list<comp_pair> from);
 ```
 Construct a `std::string` representation of a `uri` from the supplied components. The `initializer_list` contains a 1..n `comp_pair` objects. The same constraints as `factory` apply.
 
+### `make_edit`
+```c++
+constexpr std::string make_edit(std::initializer_list<comp_pair> from);
+```
+Construct a `std::string` representation of a `uri` from the current `uri` and components. The returned string is based on the current `uri` object with
+replacements of the supplied components. Components not specified are left unchanged. The `initializer_list` contains a 1..n `comp_pair` objects. The same constraints as `factory` apply.
+
 # 5. Testing
 ## Test cases
 The header file `uriexamples.hpp` contains a data structure holding the [test cases](https://github.com/fix8mt/uri/blob/master/examples/unittests.cpp)
