@@ -44,10 +44,10 @@ project (uri
 	LANGUAGES CXX
 	HOMEPAGE_URL https://github.com/fix8mt/uri
 	DESCRIPTION "Lightweight header-only C++20 URI parser"
-	VERSION 1.3.1
+	VERSION 1.4.0
 )
-include(FetchContent)
 
+include(FetchContent)
 # to disable building benchmarking tests:
 # cmake -DBUILD_BENCHMARKS=false ..
 option(BUILD_BENCHMARKS "enable building benchmarking tests" true)
@@ -69,6 +69,10 @@ FetchContent_Declare(Catch2
 )
 FetchContent_MakeAvailable(Catch2)
 list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
+
+# make include visible to inheriting projects
+add_library(${PROJECT_NAME} INTERFACE)
+target_include_directories(${PROJECT_NAME} INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 set(files uritest.cpp unittests.cpp)
 if(BUILD_BENCHMARKS)

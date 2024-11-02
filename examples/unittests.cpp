@@ -34,7 +34,9 @@
 #include <iostream>
 #include <unordered_set>
 #include <sstream>
-#include <format>
+#if __has_include(<format>)
+# include <format>
+#endif
 #include <vector>
 #include <algorithm>
 #include <string_view>
@@ -499,6 +501,7 @@ TEST_CASE("factory")
 }
 
 //-----------------------------------------------------------------------------------------
+#if __has_include(<format>)
 template<typename T>
 void do_format()
 {
@@ -517,6 +520,7 @@ TEST_CASE("format")
 	do_format<uri>();
 	do_format<uri_static<>>();
 }
+#endif
 
 //-----------------------------------------------------------------------------------------
 template<typename T>

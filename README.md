@@ -410,12 +410,12 @@ message(STATUS "Downloading uri...")
 include(FetchContent)
 FetchContent_Declare(uri GIT_REPOSITORY https://github.com/fix8mt/uri.git)
 FetchContent_MakeAvailable(uri)
-target_include_directories(myproj PRIVATE ${uri_SOURCE_DIR}/include)
+target_link_libraries(myproj PRIVATE uri)
 ```
 
 # 4. API
 ## i. Class hierarchy
-### `basic_uri`
+### a. `basic_uri`
 The base class `basic_uri` performs the bulk of the work, holding a `std::string_view` of the source uri string. If you wish to manage the scope of the source uri yourself then
 this class is the most efficient way to use uri functionality.
 
@@ -424,11 +424,11 @@ basic_uri u1{"https://www.example.com:8080/path1"};
 ```
 
 ***
-### `uri_base`
+### b. `uri_base`
 This class is aliased by `uri` and `uri_static`. You can inherit from class if you wish to specialise further.
 
 ***
-### `uri`
+### c. `uri`
 The derived class `uri` stores the source string and then builds a `basic_uri` using that string as its reference. `uri` derives from
 `basic_uri` and a private **dynamic** storage class `uri_storage`. The supplied string is moved or copied and stored by the object. If your application needs the uri
 to hold and persist the source uri, this class is suitable.
@@ -445,7 +445,7 @@ uri u1{myuri};
 ![class diagram](https://github.com/fix8mt/uri/blob/master/assets/classdynamic.png)
 
 ***
-### `uri_static`
+### d. `uri_static`
 The derived class `uri_static` stores the source string and then builds a `basic_uri` using that string as its reference. `uri_static` derives from
 `basic_uri` and a private **static** storage class `uri_storage`. The supplied string is moved or copied and stored by the object. The class is templated by the non-type parameter
 `sz` which sets the static size and maximum storage capacity for the uri. `sz` defaults to `1024`. Storage is allocated once with the object in a `std::array`. No dynamic memory is used.
@@ -462,14 +462,14 @@ uri_static<256> u1{myuri};
 ![class diagram (static)](https://github.com/fix8mt/uri/blob/master/assets/classstatic.png)
 
 ## ii. Types
-### component
+### a. component
 ```c++
 enum component { scheme, authority, userinfo, user, password, host, port, path, query, fragment, countof };
 ```
 Components are named by a public enum called `component`.  Note that the component `user` and `password` are populated if present and
 `userinfo` will also be populated.
 
-### other types
+### b. other types
 | Type | Typedef of |Description |
 | --- | --- | --- |
 | `uri_len_t`  | `std::uint16_t` | the integral type used to store offsets and lengths|
@@ -482,13 +482,13 @@ Components are named by a public enum called `component`.  Note that the compone
 | `port_pair` | same as `value_pair`|used by `find_port`|
 | `error` | `enum class error : uri_len_t { no_error, too_long, illegal_chars, empty_src, countof };`|error types|
 
-### consts
+### c. consts
 | Const | Description |
 | ------------- | ------------- |
 | `uri_max_len`  | the maximum length of a supplied uri|
 
 ## iii. Construction and destruction
-### ctor
+### a. ctor
 ```c++
 class basic_uri;
 constexpr basic_uri(std::string_view src);                           // (1)
@@ -527,7 +527,7 @@ for the uri. Calls `parse()`.
 
 All of `uri` is within the namespace **`FIX8`**.
 
-### dtor
+### b. dtor
 ```c++
 constexpr ~basic_uri();
 constexpr ~uri();
@@ -537,7 +537,7 @@ constexpr ~uri_static();
 Destroy the `uri` or `basic_uri`. The `uri` and `uri_static` objects will release the stored string.
 
 ## iv. Accessors
-### `test`
+### a. `test`
 ```c++
 constexpr bool test(uri::component what) const;
 template<uri::component what>
@@ -552,13 +552,13 @@ Use the template version if you know the component ahead of time.
 `test_any` can be used to test for multiple components (any or all) in a single statement. As above, use the template version if you know the component ahead of time.
 See the [test case](https://github.com/fix8mt/uri/blob/master/examples/unittests.cpp) "test any/all range" for example use.
 
-### `has_any`
+### b. `has_any`
 ```c++
 constexpr bool has_any() const;
 ```
 Return `true` if any component is present.
 
-### `has_[?]`
+### c. `has_[?]`
 ```c++
 constexpr bool has_[?component]() const;
 ```
@@ -573,7 +573,7 @@ if (u1.has_port())
    .
 ```
 
-### `get_component`
+### c. `get_component`
 ```c++
 constexpr std::string_view get_component(component what) const;
 template<component what>
@@ -589,7 +589,7 @@ std::cout << u1.get_component(what) << '\n';
 std::cout << u1.get_component<uri::host>() << '\n';
 ```
 
-### `get_[?]`
+### d. `get_[?]`
 ```c++
 constexpr std::string_view get_[?component]() const;
 ```
@@ -601,25 +601,25 @@ const uri u1{"https://www.hello.com:8080/"};
 std::cout << u1.get_host() << '\n';
 ```
 
-### `get_present`
+### e. `get_present`
 ```c++
 constexpr uri_len_t get_present() const;
 ```
 Return the present bitset as `uri_len_t` which has bits set corresponding to the component's enum position.
 
-### `operator bool`
+### f. `operator bool`
 ```c++
 constexpr operator bool() const;
 ```
 Returns true if parsing was successful, false on fail.
 
-### `get_error`
+### g. `get_error`
 ```c++
 constexpr error get_error() const;
 ```
 Return the last `uri::error` error enum. If no error returns `error::no_error`. Use it to obtain the reason a uri failed to parse.
 
-### `const operator[component]`
+### h. `const operator[component]`
 ```c++
 constexpr const range_pair& operator[](component idx) const;
 ```
@@ -628,7 +628,7 @@ access to the offset and length of the specified component and is used to create
 > [!WARNING]
 > This is _not_ range checked.
 
-### `const at`
+### i. `const at`
 ```c++
 template<component what>
 constexpr const range_pair& at() const;
@@ -639,14 +639,14 @@ Use this template version if you know the component ahead of time, otherwise use
 > [!WARNING]
 > This is _not_ range checked.
 
-### `in_range`
+### j. `in_range`
 ```c++
 constexpr int in_range(std::string_view::size_type pos) const;
 ```
 Return a bitset of all components that the given position in a uri lie within. You can use `bitsum` to test results. See the "in range"
 [test case](https://github.com/fix8mt/uri/blob/master/examples/unittests.cpp) for example use.
 
-### `decode_query`
+### k. `decode_query`
 ```c++
 template<char separator='&',char tagequ='='>
 constexpr query_result decode_query(bool sort=false) const;
@@ -664,7 +664,7 @@ Or if you override, say
 ```
 If no value is present, just the tag will be populated with an empty value.
 
-### `find_query`
+### l. `find_query`
 ```c++
 static constexpr std::string_view find_query (std::string_view what, const query_result& from);
 ```
@@ -672,7 +672,7 @@ Find the specified query key and return its value from the given `query_result`.
 passing `true` to `decode_query` or by calling `sort_query` first. If key not found return empty `std::string_view`. No copying, results point to uri source.
 Complexity at most $`2 * log^2(last - first) + O(1)`$ comparisons.
 
-### `decode_hex`
+### m. `decode_hex`
 ```c++
 static constexpr std::string decode_hex(std::string_view src, bool unreserved=false);
 static constexpr std::string& decode_hex(std::string& result, bool unreserved=false); // in place decode
@@ -680,54 +680,54 @@ static constexpr std::string& decode_hex(std::string& result, bool unreserved=fa
 Decode any hex values present in the supplied string. Hex values are only recognised if they are in the form `%XX` where X is a hex digit (octet) `[0-9a-fA-F]`.
 By default all percent-encoded hex values are decoded. Return in a new string or in place. If unreserved is `true` only unreserved characters will be decoded (see `is_unreserved()`).
 
-### `encode_hex`
+### n. `encode_hex`
 ```c++
 static constexpr std::string encode_hex(std::string_view src);
 ```
 Encode any hex values present in the supplied string. Hex values are only recognised if they are in the form `%XX` where X is a hex digit (octet) `[0-9a-fA-F]`.
 Only chars that are reserved (see `is_reserved()`), whitespace or not printable are encoded.  Return in a new encoded string.
 
-### `is_unreserved`
+### o. `is_unreserved`
 ```c++
 static constexpr bool is_unreserved(char c);
 ```
 Return true if the given char is a member of the unreserved set as per RFC 3986, sec 2.3.
 
-### `is_reserved`
+### p. `is_reserved`
 ```c++
 static constexpr bool is_reserved(char c);
 ```
 Return true if the given char is a member of the reserved set as per RFC 3986, sec 2.2.
 
-### `has_hex`
+### q. `has_hex`
 ```c++
 static constexpr bool has_hex(std::string_view src);
 ```
 Return true if any hex values are present in the supplied string. Hex values are only recognised if
 they are in the form `%XX` where X is a hex digit (octet) `[0-9a-fA-F]`.
 
-### `find_hex`
+### r. `find_hex`
 ```c++
 static constexpr std::string_view::size_type find_hex(std::string_view src, std::string_view::size_type pos=0);
 ```
 Return the position of the first hex value (if any) in the supplied string. Optionally supply the starting offset in pos. Hex values are only recognised if
 they are in the form `%XX` where X is a hex digit (octet) `[0-9a-fA-F]`. If not found returns `std::string_view::npos`.
 
-### `find_port`
+### s. `find_port`
 ```c++
 static constexpr std::string_view find_port(std::string_view what);
 ```
 Return the default port as a `std::string_view` for the given scheme. For example, will return `80` if given `http`. Uses private member `_default_ports`
 which contains pairs of scheme/ports.
 
-### `decode_segments`
+### t. `decode_segments`
 ```c++
 constexpr segments decode_segments(bool filter=true) const;
 ```
 Returns a `std::vector` of segments as `std::string_view` of the path component if present. If filter is `true` (default)
 remove `./` segments if found. Returns an empty vector if no path was found.
 
-### `normalize_str`
+### u. `normalize_str`
 ```c++
 static constexpr std::string normalize_str(std::string_view src);
 ```
@@ -742,7 +742,7 @@ Normalize the given string as per RFC 3986, sec 6. The normalizations done are o
 
 Returns a `std::string` of the new normalized string or the same string if no normalizations possible.
 
-### `normalize_http_str`
+### v. `normalize_http_str`
 ```c++
 static constexpr std::string normalize_http_str(std::string_view src);
 ```
@@ -752,13 +752,13 @@ Normalize the given string as per RFC 3986, sec 6, as in `normalize_str()` above
 
 Returns a `std::string` of the new normalized string or the same string if no normalizations possible.
 
-### `normalize`
+### w. `normalize`
 ```c++
 constexpr std::string normalize();
 ```
 Same as `normalize_str` above but operates on the source string in the uri object. Returns the _original_ string and updates the current object with the new normalized string.
 
-### `normalize_http`
+### x. `normalize_http`
 ```c++
 constexpr std::string normalize_http();
 ```
@@ -801,7 +801,7 @@ int main(void)
 }
 ```
 
-### `get_name`
+### y. `get_name`
 ```c++
 static constexpr std::string_view get_name(component what);
 template<component what>
@@ -810,26 +810,26 @@ static constexpr std::string_view get_name();
 Return a `std::string_view` of the specified component name. Returns an empty `std::string_view` if not found or not a legal component.
 Use the template version if you know the component ahead of time.
 
-### `get_uri`
+### z. `get_uri`
 ```c++
 constexpr std::string_view get_uri() const;
 ```
 Return a `std::string_view` of the source uri. If not set return value will be empty.
 
-### `count`
+### A. `count`
 ```c++
 constexpr int count() const;
 ```
 Return the count of components in the uri.
 
-### `operator<<`
+### B. `operator<<`
 ```c++
 friend std::ostream& operator<<(std::ostream& os, const basic_uri& what);
 ```
 Print the uri object to the specified stream. The source and individual components are printed. If a query is present, each tag value pair is printed; if
 a path is present, each segment value is also printed.
 
-### `operator==`
+### C. `operator==`
 ```c++
 friend constexpr bool operator==(const basic_uri& lhs, const basic_uri& rhs);
 friend constexpr bool operator==(const uri& lhs, const uri& rhs);
@@ -840,7 +840,7 @@ Equivalence operators for `basic_uri`, `uri` and `uri_static`. These are impleme
 1. `basic_uri` - return `true` if the source uri strings are identical
 1. `uri`, `uri_static` - return `true` if the normalized source uri strings are identical
 
-### `operator%`
+### D. `operator%`
 ```c++
 friend constexpr bool operator%(const uri& lhs, const uri& rhs);
 template<size_t sz>
@@ -848,31 +848,31 @@ friend static constexpr bool uri_static<sz>::operator%(const uri_static& lhs, co
 ```
 Equivalence operators for http protocol for `uri` and `uri_static`. Return `true` if the `normalized_http` uri strings are identical.
 
-### `get_buffer`
+### E. `get_buffer`
 ```c++
 constexpr const std::string& get_buffer() const;
 ```
 Return a `const std::string&` to the stored buffer. Only available from `uri`.
 
-### `has_any_authority`
+### F. `has_any_authority`
 ```c++
 constexpr bool has_any_authority() const;
 ```
 Returns true if any authority components are present. This means any one of `host`, `password`, `port`, `user` or `userinfo`.
 
-### `has_any_userinfo`
+### G. `has_any_userinfo`
 ```c++
 constexpr bool has_any_userinfo() const;
 ```
 Returns true if any userinfo components are present. This means any one of `user` or `password`.
 
-### `buffer`
+### H. `buffer`
 ```c++
 constexpr std::string_view buffer() const;
 ```
 Returns a `std::string_view` of the current buffer used for all uri objects except `basic_uri`.
 
-### `max_storage`
+### I. `max_storage`
 ```c++
 static constexpr uri_len_t max_storage();
 ```
@@ -880,7 +880,7 @@ Returns the maximum storage available for all uri objects except `basic_uri`. Fo
 `uri_static<sz>` will return the `sz` parameter.
 
 ## v. Mutators
-### `set`
+### a. `set`
 ```c++
 constexpr void set(uri::component what);
 template<uri::component what>
@@ -892,7 +892,7 @@ Set the specified component bit as present in the uri. Passing `uri::countof` se
 `set_all` can be used to set multiple components in a single statement. As above, use the template version if you know the component ahead of time.
 See the [test case](https://github.com/fix8mt/uri/blob/master/examples/unittests.cpp) "clear/set all range" for example use.
 
-### `clear`
+### b. `clear`
 ```c++
 constexpr void uri::clear(uri::component what);
 template<uri::component what>
@@ -904,25 +904,25 @@ Clear the specified component bit in the uri. Passing `uri::countof` clears all 
 `clear_all` can be used to clear multiple components in a single statement. As above, use the template version if you know the component ahead of time.
 See the [test case](https://github.com/fix8mt/uri/blob/master/examples/unittests.cpp) "clear/set all range" for example use.
 
-### `assign`
+### c. `assign`
 ```c++
 constexpr int assign(std::string_view src);
 ```
 Replace the current uri reference with the given reference. No storage is allocated. Return the number of components found.
 
-### `replace`
+### d. `replace`
 ```c++
 constexpr std::string replace(std::string&& src);
 ```
 Replace the current uri with the given string. The storage is updated with a move (or copy) of the string. The old string is returned.
 
-### `set_error`
+### e. `set_error`
 ```c++
 constexpr void set_error(error what);
 ```
 Set the last `uri::error` error to the error given. Setting an error is destructive and renders the uri unusable.
 
-### `operator[component]`
+### f. `operator[component]`
 ```c++
 constexpr range_pair& operator[](component idx);
 ```
@@ -931,7 +931,7 @@ access to the offset and length of the specified component and is used to create
 > [!WARNING]
 > This is _not_ range checked. Allows for modification of the `string_view` range. Use carefully.
 
-### `at`
+### g. `at`
 ```c++
 template<component what>
 constexpr range_pair& at();
@@ -948,20 +948,20 @@ std::cout << rp.first << ' ' << rp.second << '\n';
 > [!WARNING]
 > This is _not_ range checked. Allows for modification of the `string_view` range. Use carefully.
 
-### `parse`
+### h. `parse`
 ```c++
 constexpr int parse();
 ```
 Parse the source string into components. Return the count of components found. Will reset a uri if already parsed. You can check for error using `get_error()` for more info.
 
-### `sort_query`
+### i. `sort_query`
 ```c++
 static constexpr void sort_query(query_result& query);
 ```
 Sort the supplied query alphanumerically based on the tag in the query value pair. Complexity at most $`2 * log^2(last - first) + O(1)`$ comparisons.
 
 ## vi. Generation and editing
-### `factory`
+### a. `factory`
 ```c++
 static constexpr uri uri::factory(std::initializer_list<comp_pair> from);
 template<size_t sz>
@@ -971,7 +971,7 @@ Create a `uri` from the supplied components. The `initializer_list` contains a 1
 1. If `authority` is supplied and any of the following components are present `host`, `password`, `port`, `user` or `userinfo` then `authority` is ignored;
 1. If `userinfo` is supplied and any of the following components are present `user` or `password` then `userinfo` is ignored;
 
-### `format`
+### b. `format`
 ```c++
 template<typename... Args>
 static constexpr uri format(std::format_string<Args...> fmt, Args&&... args);
@@ -979,19 +979,19 @@ static constexpr uri format(std::format_string<Args...> fmt, Args&&... args);
 Create a `uri` from the supplied format string and arguments. See `std::format` for more on how to use this function. A uri will be created from the resulting string.
 See above for example usage.
 
-### `edit`
+### c. `edit`
 ```c++
 constexpr int edit(std::initializer_list<comp_pair> from);
 ```
 Modify an existing `uri` by replacing existing components with the supplied components. Components not specified are left unchanged. The `initializer_list` contains a 1..n `comp_pair` objects. The same constraints as `factory` apply.
 
-### `make_uri`
+### d. `make_uri`
 ```c++
 static constexpr std::string make_uri(std::initializer_list<comp_pair> from);
 ```
 Construct a `std::string` representation of a `uri` from the supplied components. The `initializer_list` contains a 1..n `comp_pair` objects. The same constraints as `factory` apply.
 
-### `make_edit`
+### e. `make_edit`
 ```c++
 constexpr std::string make_edit(std::initializer_list<comp_pair> from);
 ```

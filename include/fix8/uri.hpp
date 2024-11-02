@@ -45,7 +45,9 @@
 #include <limits>
 #include <cstdint>
 #include <compare>
-#include <format>
+#if __has_include(<format>)
+# include <format>
+#endif
 #include <vector>
 #include <list>
 #include <algorithm>
@@ -782,10 +784,12 @@ public:
 	static constexpr auto factory(std::initializer_list<comp_pair> from) noexcept
 		{ return uri_base(make_uri(std::move(from))); }
 
+#if __has_include(<format>)
 	/// format helper
 	template<typename... Args>
 	static constexpr auto format(std::format_string<Args...> fmt, Args&&... args)
 		{ return uri_base(std::vformat(fmt.get(), std::make_format_args(args...))); }
+#endif
 
 	/// normalize equality
 	friend constexpr auto operator==(const uri_base& lhs, const uri_base& rhs) noexcept
