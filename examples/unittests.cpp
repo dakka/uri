@@ -405,7 +405,7 @@ TEST_CASE("decode hex")
 TEST_CASE("encode hex")
 {
 	const std::string str {"/foo/" + basic_uri::encode_hex("this path has embedded spaces") + "/test/node.js"};
-	REQUIRE(str == "/foo/this%20path%20has%20embedded%20spaces/test/node.js"sv);
+REQUIRE(str == "/foo/this%20path%20has%20embedded%20spaces/test/node.js"sv);
 }
 
 //-----------------------------------------------------------------------------------------
@@ -543,5 +543,15 @@ TEST_CASE("edit")
 {
 	do_edit<uri>();
 	do_edit<uri_static<>>();
+}
+
+//-----------------------------------------------------------------------------------------
+TEST_CASE("uri_static_base")
+{
+	static constexpr uri_static_base u1{std::span{"https://dakka@www.blah.com:3000/"}};
+	REQUIRE(u1.get_host() == "www.blah.com");
+
+	static constexpr uri_static_base u2{std::span("https://dakka@www.blah.com:3000/")};
+	REQUIRE(u2.get_host() == "www.blah.com");
 }
 

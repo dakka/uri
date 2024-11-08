@@ -106,6 +106,10 @@ int main(int argc, char *argv[])
 				{
 					/*
 					using namespace std::literals;
+					constexpr auto esv1 {"https://www.hello.com/au/page1"sv};
+					uri_storage<esv1.size()> us1{esv1};
+
+					using namespace std::literals;
 					constexpr auto svs { "https://www.hello.com/au/page1"sv };
 					constexpr auto svss { svs.size() };
 					const uri_static<svss> u1{svs};
@@ -250,23 +254,39 @@ int main(int argc, char *argv[])
 			case 'f':
 				if (std::ifstream ifs(optarg); ifs)
 				{
-					int cnt{};
+					int cnt{}, longest{};
 					for (char buff[4096]; ifs.good();)
 					{
 						if (ifs.getline(buff, sizeof(buff)); !ifs.fail())
 						{
 							std::string_view sv{buff};
+							if (sv.size() > longest)
+								longest = sv.size();
 							if (sv.starts_with("//"))
 								continue;
 							if (sv.front() == '"')
 								sv.remove_prefix(1);
 							if (sv.ends_with(R"(",)"))
 								sv.remove_suffix(2);
-							std::cout << basic_uri(sv) << '\n';
+							//std::cout << basic_uri(sv) << '\n';
+							const basic_uri u1{sv};
+							if (!u1)
+								std::cout << "error " << static_cast<int>(u1.get_error()) << '\n';
+							std::cout << u1 << "bitset " << std::bitset<uri::countof>(u1.get_present()) << " ("
+								<< std::hex << std::showbase << u1.get_present() << std::dec << std::noshowbase << ")\n";
+							for (uri::component ii{}; ii != uri::countof; ii = uri::component(ii + 1))
+							{
+								if (u1.test(ii))
+								{
+									const auto [pos,len] { u1[ii] };
+									std::cout << uri::get_name(ii) << ' ' << pos << " (" << len << ")\n";
+								}
+							}
+							std::cout << '\n';
 							++cnt;
 						}
 					}
-					std::cout << cnt << " uri(s) read from " << optarg << '\n';
+					std::cout << cnt << " uri(s) read from " << optarg << ", longest uri was " << longest << '\n';
 				}
 				break;
 			case 's':

@@ -38,6 +38,7 @@
 #include <iomanip>
 #include <type_traits>
 #include <array>
+#include <span>
 #include <string>
 #include <string_view>
 #include <stdexcept>
@@ -84,6 +85,8 @@ private:
 		({ { "ftp", "21" }, { "http", "80" }, { "https", "443" }, { "imap", "143" }, { "ldap", "389" }, { "smtp", "25" }, { "telnet", "23" }, }) };
 public:
 	constexpr basic_uri(std::string_view src) noexcept : _source(src) { parse(); }
+	template<size_t sz>
+	constexpr basic_uri(std::span<const char, sz> sv) noexcept : _source{sv.begin(), sv.end()} { parse(); }
 	constexpr basic_uri(int bits) noexcept : _present(bits) {}
 	constexpr basic_uri() = default;
 	constexpr ~basic_uri() = default;
@@ -592,7 +595,7 @@ protected:
 		{
 			if (!ibase.test(ii) || done.test(ii))
 				continue;
-			switch(const auto& str{ilist[ii]}; ii)
+			switch(auto str{ilist[ii]}; ii)
 			{
 			case scheme:
 				result += str;
@@ -691,11 +694,12 @@ class uri_storage
 {
 	std::array<char, sz> _buffer;
 	size_t _sz{};
+
 protected:
-	constexpr uri_storage(std::string src) noexcept : _sz(src.size() > sz ? 0 : src.size())
+	explicit constexpr uri_storage(std::string src) noexcept : _sz(src.size() > sz ? 0 : src.size())
 		{ std::copy_n(src.cbegin(), _sz, _buffer.begin()); }
+	explicit constexpr uri_storage(std::string_view sv) noexcept : uri_storage(std::string(sv)) {}
 	constexpr uri_storage() = default;
-	constexpr ~uri_storage() = default;
 	constexpr std::string swap(std::string src) noexcept
 	{
 		if (src.size() > sz)
@@ -704,9 +708,29 @@ protected:
 		std::copy_n(src.cbegin(), _sz = src.size(), _buffer.begin());
 		return old;
 	}
+	constexpr std::string_view buffer() const noexcept { return {_buffer.cbegin(), _sz}; }
+	constexpr ~uri_storage() = default;
 public:
-	constexpr std::string_view buffer() const noexcept
-		{ return {_buffer.cbegin(), _sz}; }
+	static constexpr auto max_storage() noexcept { return sz; }
+};
+
+//-----------------------------------------------------------------------------------------
+/// constexpr static storage
+template<size_t sz>
+requires(sz > 0)
+class uri_storage_immutable
+{
+	const std::array<char, sz> _buffer;
+
+	template<std::size_t... I>
+	constexpr uri_storage_immutable(std::span<const char, sz> sv, std::index_sequence<I...>) noexcept : _buffer{sv[I]...} {}
+
+protected:
+	constexpr uri_storage_immutable(std::span<const char, sz> sv) noexcept : uri_storage_immutable{sv, std::make_index_sequence<sz>{}} {}
+	constexpr uri_storage_immutable() = delete;
+	constexpr ~uri_storage_immutable() = default;
+	constexpr std::string_view buffer() const noexcept { return {_buffer.data(), sz}; }
+public:
 	static constexpr auto max_storage() noexcept { return sz; }
 };
 
@@ -720,8 +744,7 @@ protected:
 	constexpr uri_storage(std::string src) noexcept : _buffer(std::move(src)) {}
 	constexpr uri_storage() = default;
 	constexpr ~uri_storage() = default;
-	constexpr std::string swap(std::string src) noexcept
-		{ return std::exchange(_buffer, std::move(src)); }
+	constexpr std::string swap(std::string src) noexcept { return std::exchange(_buffer, std::move(src)); }
 public:
 	constexpr std::string_view buffer() const noexcept { return _buffer; }
 	static constexpr auto max_storage() noexcept { return basic_uri::uri_max_len; }
@@ -736,6 +759,7 @@ public:
 		: uri_storage<sz>(std::move(src)), basic_uri(this->buffer()) {}
 	constexpr uri_base(std::string_view src) noexcept : uri_base(std::string(src)) {}
 	constexpr uri_base(const char *src) noexcept : uri_base(std::string(src)) {}
+	constexpr uri_base(std::span<const char, sz> sv) noexcept : uri_base{sv.begin(), sv.end()} {}
 	constexpr uri_base() = default;
 	constexpr ~uri_base() = default;
 
@@ -797,6 +821,18 @@ public:
 	/// normalize_http equality
 	friend constexpr auto operator%(const uri_base& lhs, const uri_base& rhs) noexcept
 		{ return normalize_http_str(lhs.get_uri()) == normalize_http_str(rhs.get_uri()); }
+};
+
+//-----------------------------------------------------------------------------------------
+template<size_t sz>
+requires(sz > 0)
+class uri_static_base : public uri_storage_immutable<sz>, public basic_uri
+{
+public:
+	constexpr uri_static_base(std::span<const char, sz> sv) noexcept
+		: uri_storage_immutable<sz>{sv}, basic_uri{uri_storage_immutable<sz>::buffer()} {}
+	constexpr uri_static_base() = delete;
+	constexpr ~uri_static_base() = default;
 };
 
 //-----------------------------------------------------------------------------------------

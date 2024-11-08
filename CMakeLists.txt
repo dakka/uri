@@ -47,6 +47,11 @@ project (uri
 	VERSION 1.4.0
 )
 
+# to disable strip:
+# cmake -DBUILD_STRIP_EXE=false ..
+option(BUILD_STRIP_EXE "enable stripping of non-unittest executables" true)
+message("-- Build: strip exes ${BUILD_STRIP_EXE}")
+
 include(FetchContent)
 # to disable building benchmarking tests:
 # cmake -DBUILD_BENCHMARKS=false ..
@@ -59,6 +64,9 @@ if(BUILD_BENCHMARKS)
 		GIT_SHALLOW	ON
 	)
 	FetchContent_MakeAvailable(Criterion)
+	if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+		target_compile_options(Criterion INTERFACE -fbracket-depth=257)
+	endif()
 endif()
 
 message(STATUS "Downloading Catch2...")
@@ -74,7 +82,7 @@ list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 add_library(${PROJECT_NAME} INTERFACE)
 target_include_directories(${PROJECT_NAME} INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-set(files uritest.cpp unittests.cpp)
+set(files uritest.cpp unittests.cpp statictest.cpp)
 if(BUILD_BENCHMARKS)
 	list(APPEND files benchmarks.cpp)
 endif()
@@ -83,14 +91,17 @@ foreach(x IN LISTS files)
 	add_executable(${target} examples/${x})
 	set_target_properties(${target} PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED true)
 	target_include_directories(${target} PRIVATE include examples)
-	target_link_libraries(${target} PRIVATE Catch2::Catch2WithMain)
 	if(BUILD_BENCHMARKS)
 		target_link_libraries(${target} PRIVATE Criterion)
+	endif()
+	if(BUILD_STRIP_EXE)
+		add_custom_command(TARGET ${target} POST_BUILD COMMAND ${CMAKE_STRIP} ${target})
 	endif()
 	cmake_path(GET x FILENAME fname)
 	get_target_property(cppstd ${target} CXX_STANDARD)
 	message("-- adding ${fname} cxx std: C++${cppstd}")
 endforeach()
+target_link_libraries(unittests PRIVATE Catch2::Catch2WithMain)
 
 include(Catch)
 enable_testing()
