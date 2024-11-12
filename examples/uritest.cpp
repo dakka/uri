@@ -255,6 +255,7 @@ int main(int argc, char *argv[])
 				if (std::ifstream ifs(optarg); ifs)
 				{
 					int cnt{}, longest{};
+					std::vector<std::pair<uri::error, std::string>> err_uris{};
 					for (char buff[4096]; ifs.good();)
 					{
 						if (ifs.getline(buff, sizeof(buff)); !ifs.fail())
@@ -268,29 +269,33 @@ int main(int argc, char *argv[])
 								sv.remove_prefix(1);
 							if (sv.ends_with(R"(",)"))
 								sv.remove_suffix(2);
-							//std::cout << basic_uri(sv) << '\n';
 							const basic_uri u1{sv};
 							if (!u1)
-								std::cout << "error " << static_cast<int>(u1.get_error()) << '\n';
-							std::cout << u1 << "bitset " << std::bitset<uri::countof>(u1.get_present()) << " ("
-								<< std::hex << std::showbase << u1.get_present() << std::dec << std::noshowbase << ")\n";
-							for (uri::component ii{}; ii != uri::countof; ii = uri::component(ii + 1))
+								err_uris.push_back(std::make_pair(u1.get_error(), std::string{sv}));
+							else
 							{
-								if (u1.test(ii))
+								std::cout << u1 << "bitset " << std::bitset<uri::countof>(u1.get_present()) << " ("
+									<< std::hex << std::showbase << u1.get_present() << std::dec << std::noshowbase << ")\n";
+								for (uri::component ii{}; ii != uri::countof; ii = uri::component(ii + 1))
 								{
-									const auto [pos,len] { u1[ii] };
-									std::cout << uri::get_name(ii) << ' ' << pos << " (" << len << ")\n";
+									if (u1.test(ii))
+									{
+										const auto [pos,len] { u1[ii] };
+										std::cout << uri::get_name(ii) << ' ' << pos << " (" << len << ")\n";
+									}
 								}
 							}
 							std::cout << '\n';
 							++cnt;
 						}
 					}
-					std::cout << cnt << " uri(s) read from " << optarg << ", longest uri was " << longest << '\n';
+					for(const auto& [err,ur] : err_uris)
+						std::cout << static_cast<int>(err) << ": " << ur << '\n';
+					std::cout << cnt << " uri(s) read from " << optarg << ", " << err_uris.size() << " errors, longest uri was " << longest << '\n';
 				}
 				break;
 			case 's':
-				std::cout << "uri: " << sizeof(uri) << "\nbasic_uri: " << sizeof(basic_uri) << '\n';
+				std::cout << "uri: " << sizeof(uri) << "\nbasic_uri: " << sizeof(basic_uri<>) << '\n';
 				std::cout << "uri_static<1024>: " << sizeof(uri_static<1024>) << '\n';
 				break;
 			case 'a':

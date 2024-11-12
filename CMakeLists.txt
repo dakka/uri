@@ -82,7 +82,7 @@ list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 add_library(${PROJECT_NAME} INTERFACE)
 target_include_directories(${PROJECT_NAME} INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-set(files uritest.cpp unittests.cpp statictest.cpp)
+set(files uritest.cpp statictest.cpp unittests.cpp)
 if(BUILD_BENCHMARKS)
 	list(APPEND files benchmarks.cpp)
 endif()

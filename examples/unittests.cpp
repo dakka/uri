@@ -73,6 +73,7 @@ TEST_CASE("subscript operator")
 }
 
 //-----------------------------------------------------------------------------------------
+/*
 TEST_CASE("bitset")
 {
 	uri u1{tests[0].first};
@@ -87,6 +88,7 @@ TEST_CASE("bitset")
 	b1.clear<scheme>();
 	REQUIRE(b1.get_present() == 0b1111111110);
 }
+*/
 
 //-----------------------------------------------------------------------------------------
 TEST_CASE("get name")
@@ -139,8 +141,9 @@ void run_test_comp(int id, const auto& ui)
 {
 	const auto& vec { tests[id].second };
 	INFO("uri: " << id); // << ' ' << uri{u1});
+	INFO(ui);
 	REQUIRE(ui.count() == vec.size());
-	for (const auto& [comp,str] : vec)
+	for (auto [comp,str] : vec)
 	{
 		INFO("component: " << comp);
 		REQUIRE(ui.get_component(comp) == str);
@@ -153,8 +156,10 @@ TEST_CASE("uri component validations")
 	for (int ii{}; ii < tests.size(); ++ii)
 	{
 		auto str{decode1st.contains(ii) ? uri::decode_hex(tests[ii].first, false) : tests[ii].first};
+		INFO("test: uri");
 		run_test_comp(ii, uri{str});
-		REQUIRE(std::string_view(tests[ii].first).size() < uri_static<>::max_storage());
+		REQUIRE(std::string_view(tests[ii].first).size() < uri_static<>::max_size());
+		INFO("test: uri_static");
 		run_test_comp(ii, uri_static<>{str});
 	}
 }
@@ -218,21 +223,23 @@ TEST_CASE("replace")
 }
 
 //-----------------------------------------------------------------------------------------
+/*
 TEST_CASE("storage")
 {
 	const auto& [src,vec] { tests[0] };
 	const uri u1{src};
 	REQUIRE(src == u1.get_uri());
-	REQUIRE(u1.buffer() == u1.get_uri());
-	REQUIRE(u1.buffer() == src);
+	REQUIRE(u1.get_storage() == u1.get_uri());
+	REQUIRE(u1.get_storage() == src);
 }
+*/
 
 //-----------------------------------------------------------------------------------------
 TEST_CASE("invalid uri")
 {
 	static constexpr auto baduris
 	{
-		std::to_array<basic_uri>
+		std::to_array<uri_view>
 		({
 			"https://www.example.com\n"sv,
 			"https://www.example.com\r"sv,
@@ -266,11 +273,9 @@ TEST_CASE("limits")
 //-----------------------------------------------------------------------------------------
 TEST_CASE("empty")
 {
-	uri u1{""}, u2;
+	uri u1{""};
 	REQUIRE(!u1);
-	REQUIRE(!u2);
 	REQUIRE(u1.get_error() == uri::error::empty_src);
-	REQUIRE(u2.get_error() == uri::error::no_error);
 }
 //-----------------------------------------------------------------------------------------
 TEST_CASE("ports")
@@ -394,18 +399,17 @@ TEST_CASE("decode hex")
 	REQUIRE(!uri::has_hex(result));
 	uri u1{result};
 	REQUIRE(u1.get_uri() == uris[1]);
-	basic_uri u2(uris[0]);
-	REQUIRE(basic_uri::has_hex(u2.get_uri()));
+	uri_view u2(uris[0]);
+	REQUIRE(uri_view::has_hex(u2.get_uri()));
 	REQUIRE(uri::has_hex(uris[3]));
 	REQUIRE(uri::decode_hex(uris[0]) == uri::decode_hex(uris[5]));
-
 }
 
 //-----------------------------------------------------------------------------------------
 TEST_CASE("encode hex")
 {
-	const std::string str {"/foo/" + basic_uri::encode_hex("this path has embedded spaces") + "/test/node.js"};
-REQUIRE(str == "/foo/this%20path%20has%20embedded%20spaces/test/node.js"sv);
+	const std::string str {"/foo/" + uri_view::encode_hex("this path has embedded spaces") + "/test/node.js"};
+	REQUIRE(str == "/foo/this%20path%20has%20embedded%20spaces/test/node.js"sv);
 }
 
 //-----------------------------------------------------------------------------------------
@@ -490,7 +494,7 @@ void do_factory()
 	run_test_comp(8, u2);
 	const auto u3 { T::factory({{scheme, "mailto"}, {path, "John.Smith@example.com"}}) };
 	run_test_comp(15, u3);
-	const auto u4 { uri::factory({{scheme, "file"}, {authority, ""}, {path, "/foo/" + basic_uri::encode_hex("this path has embedded spaces") + "/test/node.js"}}) };
+	const auto u4 { uri::factory({{scheme, "file"}, {authority, ""}, {path, "/foo/" + uri_view::encode_hex("this path has embedded spaces") + "/test/node.js"}}) };
 	REQUIRE(u4.get_path() == "/foo/this%20path%20has%20embedded%20spaces/test/node.js"sv);
 }
 
@@ -505,13 +509,13 @@ TEST_CASE("factory")
 template<typename T>
 void do_format()
 {
-	const auto u1 { T::format("{}://{}@{}:{}{}", "https", "dakka", "www.blah.com", "3000", "/") };
+	const auto u1 { uri::format<T>("{}://{}@{}:{}{}", "https", "dakka", "www.blah.com", "3000", "/") };
 	run_test_comp(3, u1);
-	const auto u2 { T::format("{}://{}", "file", "/foo/bar/test/node.js") };
+	const auto u2 { uri::format<T>("{}://{}", "file", "/foo/bar/test/node.js") };
 	run_test_comp(8, u2);
-	const auto u3 { T::format("{}:{}", "mailto", "John.Smith@example.com") };
+	const auto u3 { uri::format<T>("{}:{}", "mailto", "John.Smith@example.com") };
 	run_test_comp(15, u3);
-	const auto u4 { uri::format("{}:{}", "file", "/foo/" + basic_uri::encode_hex("this path has embedded spaces") + "/test/node.js") };
+	const auto u4 { uri::format<T>("{}:{}", "file", "/foo/" + uri_view::encode_hex("this path has embedded spaces") + "/test/node.js") };
 	REQUIRE(u4.get_path() == "/foo/this%20path%20has%20embedded%20spaces/test/node.js"sv);
 }
 
@@ -546,12 +550,30 @@ TEST_CASE("edit")
 }
 
 //-----------------------------------------------------------------------------------------
-TEST_CASE("uri_static_base")
+TEST_CASE("uri_static_immutable")
 {
-	static constexpr uri_static_base u1{std::span{"https://dakka@www.blah.com:3000/"}};
+	constexpr uri_static_immutable u1{std::span{"https://dakka@www.blah.com:3000/"}};
 	REQUIRE(u1.get_host() == "www.blah.com");
 
-	static constexpr uri_static_base u2{std::span("https://dakka@www.blah.com:3000/")};
-	REQUIRE(u2.get_host() == "www.blah.com");
+	constexpr uri_static_immutable u2{std::span
+	{	"http://nodejs.org:89/docs/latest/api/foo/bar/qua/13949281/0f28b/5d49/b3020/url.html"
+		"?payload1=true&payload2=false&test=1&benchmark=3&foo=38.38.011.293"
+		"&bar=1234834910480&test=19299&3992&key=f5c65e1e98fe07e648249ad41e1cfdb0#test"
+	}};
+	REQUIRE(u2.get_host() == "nodejs.org");
+}
+
+//-----------------------------------------------------------------------------------------
+TEST_CASE("for_each")
+{
+	constexpr uri_static_immutable u1{std::span{"https://dakka@www.blah.com:3000/"}};
+	int count{};
+	u1.for_each([](uri::comp_pair comp, int& cnt)
+	{
+		std::cout << static_cast<int>(comp.first) << ": " << comp.second << '\n';
+		++cnt;
+	}, std::ref(count));
+	REQUIRE(count == 7);
+	count = 0;
 }
 

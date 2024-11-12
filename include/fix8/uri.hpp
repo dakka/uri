@@ -46,6 +46,8 @@
 #include <limits>
 #include <cstdint>
 #include <compare>
+#include <functional>
+#include <concepts>
 #if __has_include(<format>)
 # include <format>
 #endif
@@ -58,72 +60,122 @@
 namespace FIX8 {
 
 //-----------------------------------------------------------------------------------------
-class basic_uri
+template<size_t sz>
+requires(sz > 0)
+class uri_storage
 {
+   std::array<char, sz> _buffer;
+   size_t _sz{};
+
 public:
+   explicit constexpr uri_storage(std::string src) noexcept : _sz(src.size() > sz ? 0 : src.size())
+      { std::copy_n(src.cbegin(), _sz, _buffer.begin()); }
+   constexpr uri_storage(auto sv) noexcept : uri_storage(std::string(sv.begin(), sv.end())) {}
+   constexpr uri_storage() = default;
+   constexpr ~uri_storage() = default;
+
+	constexpr std::string_view substr(std::string_view::size_type pos=0, std::string_view::size_type count=std::string_view::npos) const noexcept
+		{ return { _buffer.data() + pos, count == std::string_view::npos || count > sz ? _sz : count }; }
+	constexpr auto begin() const noexcept { return _buffer.cbegin(); }
+	constexpr auto end() const noexcept { return _buffer.cend(); }
+   constexpr const char *data() const noexcept { return _buffer.data(); }
+   constexpr size_t size() const noexcept { return _sz; }
+   static constexpr auto max_size() noexcept { return sz; }
+};
+
+//-----------------------------------------------------------------------------------------
+template<size_t sz>
+requires(sz > 0)
+class uri_storage_immutable
+{
+   const std::array<char, sz> _buffer;
+
+   template<std::size_t... I>
+   constexpr uri_storage_immutable(std::span<const char, sz> sv, std::index_sequence<I...>) noexcept : _buffer{sv[I]...} {}
+
+public:
+   constexpr uri_storage_immutable(auto sv) noexcept : uri_storage_immutable{sv, std::make_index_sequence<sz>{}} {}
+   constexpr uri_storage_immutable() = delete;
+   constexpr ~uri_storage_immutable() = default;
+
+	constexpr auto begin() const noexcept { return _buffer.cbegin(); }
+	constexpr auto end() const noexcept { return _buffer.cend(); }
+	constexpr std::string_view substr(std::string_view::size_type pos=0, std::string_view::size_type count=std::string_view::npos) const noexcept
+		{ return { _buffer.data() + pos, count == std::string_view::npos || count > sz ? sz : count }; }
+   constexpr const char *data() const noexcept { return _buffer.data(); }
+   constexpr size_t size() const noexcept { return sz; }
+   static constexpr auto max_size() noexcept { return sz; }
+};
+
+//-----------------------------------------------------------------------------------------
+struct uri_common // EBO candidate
+{
 	using value_pair = std::pair<std::string_view, std::string_view>;
 	using query_result = std::vector<value_pair>;
 	using uri_len_t = std::uint16_t;
 	using range_pair = std::pair<uri_len_t, uri_len_t>; // offset, len
 	enum component { scheme, authority, userinfo, user, password, host, port, path, query, fragment, countof };
-	static constexpr int all_components {(1 << countof) - 1};
 	enum class error : uri_len_t { no_error, too_long, illegal_chars, empty_src, countof };
 	enum class scheme_t { ftp, http, https, imap, ldap, smtp, telnet, countof };
-	static constexpr auto uri_max_len {std::numeric_limits<uri_len_t>::max()};
 	using comp_pair = std::pair<component, std::string_view>;
 	using comp_list = std::vector<std::string_view>;
 	using segments = comp_list;
 	using port_pair = value_pair;
-private:
-	std::string_view _source;
-	std::array<range_pair, component::countof> _ranges{};
-	std::uint16_t _present{};
+
+	static constexpr int all_components {(1 << countof) - 1};
+	static constexpr auto uri_max_len {std::numeric_limits<uri_len_t>::max()};
 	static constexpr std::array _component_names { "scheme", "authority", "userinfo", "user", "password", "host", "port", "path", "query", "fragment", };
 	static constexpr std::string_view _hexds { "0123456789ABCDEF" };
 	static constexpr std::string_view _reserved { ":/?#[]@!$&'()*+,;=" };
 	static constexpr std::array _default_ports { std::to_array<port_pair>
 		({ { "ftp", "21" }, { "http", "80" }, { "https", "443" }, { "imap", "143" }, { "ldap", "389" }, { "smtp", "25" }, { "telnet", "23" }, }) };
-public:
-	constexpr basic_uri(std::string_view src) noexcept : _source(src) { parse(); }
-	template<size_t sz>
-	constexpr basic_uri(std::span<const char, sz> sv) noexcept : _source{sv.begin(), sv.end()} { parse(); }
-	constexpr basic_uri(int bits) noexcept : _present(bits) {}
-	constexpr basic_uri() = default;
-	constexpr ~basic_uri() = default;
+};
 
-	constexpr int assign(std::string_view src) noexcept
+//-----------------------------------------------------------------------------------------
+template<typename T=std::string_view>
+class basic_uri : public uri_common
+{
+	T _source;
+	std::array<range_pair, component::countof> _ranges{};
+	std::uint16_t _present{};
+
+public:
+   constexpr basic_uri(std::string_view src) noexcept : _source{src} { parse(); }
+   constexpr basic_uri(const char *src) noexcept : basic_uri{std::string_view{src}} {}
+   constexpr basic_uri(std::string src) noexcept : _source{src} { parse(); }
+	template<size_t sz>
+   explicit constexpr basic_uri(std::span<const char, sz> sv) noexcept : _source{sv} { parse(); }
+   constexpr basic_uri() = default;
+   constexpr ~basic_uri() = default;
+
+   constexpr std::string_view as_string_view() const noexcept
+		requires(std::derived_from<std::string_view,T> || std::derived_from<std::string,T>) { return _source; }
+   constexpr std::string_view as_string_view() const noexcept { return {_source.data(), _source.size()}; }
+   constexpr auto size() const noexcept { return _source.size(); }
+	constexpr int assign(T src) noexcept requires(!std::is_const_v<T>)
 	{
 		_source = src;
 		clear<countof>();
 		return parse();
 	}
-	constexpr std::string_view get_uri() const noexcept { return _source; }
+
+   static constexpr auto max_size() noexcept
+		requires (requires { { T::max_size() } -> std::same_as<size_t>; }) { return T::max_size(); }
+   constexpr auto max_size() const noexcept
+		requires (requires(T t) { { t.max_size() } -> std::same_as<typename T::size_type>; }) { return _source.max_size(); }
+
+	constexpr std::string_view get_uri() const noexcept { return as_string_view(); }
 
 	template<component what>
 	constexpr std::string_view get_component() const noexcept
 	{
 		if constexpr (what < countof)
-			return _source.substr(_ranges[what].first, _ranges[what].second);
+			return as_string_view().substr(_ranges[what].first, _ranges[what].second);
 		else
 			return std::string_view();
 	}
 	constexpr std::string_view get_component(component what) const noexcept
-		{ return what < countof ? _source.substr(_ranges[what].first, _ranges[what].second) : std::string_view(); }
-
-	template<typename... Comp>
-	static constexpr int bitsum(Comp... comp) noexcept { return (... | (1 << comp)); }
-
-	template<component... comp>
-	static constexpr int bitsum() noexcept { return (... | (1 << comp)); }
-
-	template<component what>
-	static constexpr bool has_bit(auto totest) noexcept
-	{
-		if constexpr (what < countof)
-			return totest & (1 << what);
-		else
-			return false;
-	}
+		{ return what < countof ? as_string_view().substr(_ranges[what].first, _ranges[what].second) : std::string_view(); }
 
 	/*! Provides const direct access to the offset and length of the specifed component and is used to create a `std::string_view`.
 	  	\param idx index into table
@@ -212,15 +264,16 @@ public:
 	constexpr int parse() noexcept
 	{
 		using namespace std::literals::string_view_literals;
+		auto svsrc { as_string_view() };
 		while(true)
 		{
-			if (_source.empty())
+			if (svsrc.empty())
 				set_error(error::empty_src);
-			else if (_source.size() > uri_max_len)
+			else if (svsrc.size() > uri_max_len)
 				set_error(error::too_long);
-			else if (_source.find_first_of(" \t\n\f\r\v"sv) != std::string_view::npos)
+			else if (svsrc.find_first_of(" \t\n\f\r\v"sv) != std::string_view::npos)
 			{
-				auto qur { _source.find_first_of('?') }, sps { _source.find_first_of(' ') };
+				auto qur { svsrc.find_first_of('?') }, sps { svsrc.find_first_of(' ') };
 				if (qur != std::string_view::npos && sps != std::string_view::npos && qur < sps)
 					break;
 				set_error(error::illegal_chars);
@@ -231,24 +284,24 @@ public:
 		}
 		std::string_view::size_type pos{}, hst{}, pth{std::string_view::npos};
 		bool scq{};
-		if (const auto sch {_source.find_first_of(':')}; sch != std::string_view::npos)
+		if (const auto sch {svsrc.find_first_of(':')}; sch != std::string_view::npos)
 		{
 			_ranges[scheme] = {0, sch};
 			set<scheme>();
 			pos = sch + 1;
 		}
-		if (_source[pos] == '?')	// short circuit query eg. magnet
+		if (svsrc[pos] == '?')	// short circuit query eg. magnet
 			scq = true;
-		else if (auto auth {_source.find("//"sv, pos)}; auth != std::string_view::npos)
+		else if (auto auth {svsrc.find("//"sv, pos)}; auth != std::string_view::npos)
 		{
 			auth += 2;
-			if ((pth = _source.find_first_of('/', auth)) == std::string_view::npos) // unterminated path
-				pth = _source.size();
+			if ((pth = svsrc.find_first_of('/', auth)) == std::string_view::npos) // unterminated path
+				pth = svsrc.size();
 			_ranges[authority] = {auth, pth - auth};
 			set<authority>();
-			if (const auto usr {_source.find_first_of('@', auth)}; usr != std::string_view::npos && usr < pth)
+			if (const auto usr {svsrc.find_first_of('@', auth)}; usr != std::string_view::npos && usr < pth)
 			{
-				if (const auto pw {_source.find_first_of(':', auth)}; pw != std::string_view::npos && pw < usr) // no nested ':' before '@'
+				if (const auto pw {svsrc.find_first_of(':', auth)}; pw != std::string_view::npos && pw < usr) // no nested ':' before '@'
 				{
 					_ranges[user] = {auth, pw - auth};
 					if (usr - pw - 1 > 0)
@@ -266,14 +319,14 @@ public:
 			else
 				hst = pos = auth;
 
-			if (auto prt { _source.find_first_of(':', pos) }; prt != std::string_view::npos)
+			if (auto prt { svsrc.find_first_of(':', pos) }; prt != std::string_view::npos)
 			{
 				if (auto autstr {get_component<authority>()}; autstr.front() != '[' && autstr.back() != ']')
 				{
 					++prt;
-					if (_source.size() - prt > 0)
+					if (svsrc.size() - prt > 0)
 					{
-						_ranges[port] = {prt, _source.size() - prt};
+						_ranges[port] = {prt, svsrc.size() - prt};
 						set<port>();
 					}
 				}
@@ -293,31 +346,31 @@ public:
 				_ranges[host] = {hst, pth - hst};
 			if (_ranges[host].second)
 				set<host>();
-			_ranges[path] = {pth, _source.size() - pth};
+			_ranges[path] = {pth, svsrc.size() - pth};
 			set<path>();
 		}
 		if (pth == std::string_view::npos && !scq)
 		{
 			set<path>();
-			if ((pth = _source.find_first_of('/', pos)) != std::string_view::npos)
-				_ranges[path] = {pth, _source.size() - pth};
+			if ((pth = svsrc.find_first_of('/', pos)) != std::string_view::npos)
+				_ranges[path] = {pth, svsrc.size() - pth};
 			else if (has_scheme())
-				_ranges[path] = {pos, _source.size() - pos};
+				_ranges[path] = {pos, svsrc.size() - pos};
 			else
 				clear<path>();
 		}
-		if (const auto qur {_source.find_first_of('?', pos)}; qur != std::string_view::npos)
+		if (const auto qur {svsrc.find_first_of('?', pos)}; qur != std::string_view::npos)
 		{
 			if (has_path())
 				_ranges[path].second = qur - _ranges[path].first;
-			_ranges[query] = {qur + 1, _source.size() - qur};
+			_ranges[query] = {qur + 1, svsrc.size() - qur};
 			set<query>();
 		}
-		if (const auto fra {_source.find_first_of('#', pos)}; fra != std::string_view::npos)
+		if (const auto fra {svsrc.find_first_of('#', pos)}; fra != std::string_view::npos)
 		{
 			if (has_query())
 				_ranges[query].second = fra - _ranges[query].first;
-			_ranges[fragment] = {fra + 1, _source.size() - fra};
+			_ranges[fragment] = {fra + 1, svsrc.size() - fra};
 			set<fragment>();
 		}
 		return count();
@@ -402,6 +455,82 @@ public:
 		return result;
 	}
 
+   /// for_each
+   template<typename Fn, typename... Args>
+   requires std::invocable<Fn&&, comp_pair, Args...>
+   [[maybe_unused]] constexpr auto for_each(Fn&& func, Args&&... args) const noexcept
+   {
+		for (component ii{}; ii != countof; ii = component(ii + 1))
+			if (test(ii))
+				std::invoke(std::forward<Fn>(func), comp_pair(ii, get_component(ii)), std::forward<Args>(args)...);
+      return std::bind(std::forward<Fn>(func), std::placeholders::_1, std::forward<Args>(args)...);
+   }
+
+   template<typename Fn, typename C, typename... Args> // specialisation for member function with object
+   requires std::invocable<Fn&&, C, comp_pair, Args...>
+   [[maybe_unused]] constexpr auto for_each(Fn&& func, C *obj, Args&&... args) const noexcept
+   {
+      return for_each(std::bind(std::forward<Fn>(func), obj, std::placeholders::_1, std::forward<Args>(args)...));
+   }
+
+	constexpr std::string replace(std::string src) noexcept requires(!std::is_const_v<T>)
+	{
+		std::string old{as_string_view()};
+		assign(src);
+		return old;
+	}
+	constexpr std::string make_edit(std::initializer_list<comp_pair> from) noexcept
+	{
+		basic_uri ibase;
+		comp_list ilist{countof};
+		for (component ii{}; ii != countof; ii = component(ii + 1))
+		{
+			if (test(ii))
+			{
+				ibase.set(ii);
+				ilist[ii] = get_component(ii);
+			}
+		}
+		for (const auto& [comp,str] : from)
+		{
+			if (comp < countof)
+			{
+				ibase.set(comp);
+				ilist[comp] = str;
+			}
+		}
+		if (!ibase.has_any())
+			return 0;
+		if (ibase.has_any_authority())
+			ibase.clear<authority>();
+		if (ibase.has_userinfo() && ibase.has_any_userinfo())
+			ibase.clear<userinfo>();
+		return make_uri(ibase, std::move(ilist));
+	}
+	constexpr int edit(std::initializer_list<comp_pair> from) noexcept
+	{
+		replace(make_edit(std::move(from)));
+		return count();
+	}
+	constexpr auto normalize() noexcept { return replace(normalize_str(this->get_uri())); }
+	constexpr auto normalize_http() noexcept { return replace(normalize_http_str(this->get_uri())); }
+
+	/// static methods --------------------------------------------------------------------------------
+	template<typename... Comp>
+	static constexpr int bitsum(Comp... comp) noexcept { return (... | (1 << comp)); }
+
+	template<component... comp>
+	static constexpr int bitsum() noexcept { return (... | (1 << comp)); }
+
+	template<component what>
+	static constexpr bool has_bit(auto totest) noexcept
+	{
+		if constexpr (what < countof)
+			return totest & (1 << what);
+		else
+			return false;
+	}
+
 	static constexpr void sort_query(query_result& query) noexcept
 		{ std::sort(query.begin(), query.end(), query_comp); }
 	static constexpr std::string_view find_port(std::string_view what) noexcept
@@ -452,11 +581,12 @@ public:
 	static constexpr std::string normalize_str(std::string_view src, int components=all_components) noexcept
 	{
 		using namespace std::literals::string_view_literals;
+		constexpr auto isup([](std::string_view src) noexcept ->bool
+			{ return std::any_of(std::cbegin(src), std::cend(src), [](const auto c) noexcept { return std::isupper(c); }); });
+		constexpr auto tolo([](auto c) noexcept ->auto { return std::tolower(c); });
+
 		std::string result{src};
 		basic_uri bu{result};
-		const auto isup([](std::string_view src) noexcept ->bool
-			{ return std::any_of(std::cbegin(src), std::cend(src), [](const auto c) noexcept { return std::isupper(c); }); });
-		const auto tolo([](auto c) noexcept ->auto { return std::tolower(c); });
 		auto sch { bu.get_scheme() }, hst { bu.get_host() };
 		if (has_bit<scheme>(components) && isup(sch)) // 1. scheme => lower case
 			transform(sch.begin(), sch.end(), std::string::iterator(result.data() + bu[scheme].first), tolo);
@@ -556,11 +686,30 @@ public:
 		return make_uri(ibase, std::move(ilist));
 	}
 
+	static constexpr auto factory(std::initializer_list<comp_pair> from) noexcept
+		{ return basic_uri<std::string>(make_uri(std::move(from))); }
+
+#if __has_include(<format>)
+	/// format helper
+	template<typename U=basic_uri, typename... Args>
+	static constexpr auto format(std::format_string<Args...> fmt, Args&&... args)
+		{ return U(std::vformat(fmt.get(), std::make_format_args(args...))); }
+#endif
+
+	friend constexpr bool operator==(const basic_uri& lhs, const basic_uri& rhs) noexcept
+		{ return lhs._source == rhs._source; }
+	/// normalize equality
+	friend constexpr bool operator<=(const basic_uri& lhs, const basic_uri& rhs) noexcept
+		{ return normalize_str(lhs.get_uri()) == normalize_str(rhs.get_uri()); }
+	/// normalize_http equality
+	friend constexpr bool operator%(const basic_uri& lhs, const basic_uri& rhs) noexcept
+		{ return normalize_http_str(lhs.get_uri()) == normalize_http_str(rhs.get_uri()); }
+
 	friend std::ostream& operator<<(std::ostream& os, const basic_uri& what)
 	{
 		if (!what)
 			os << "error: " << static_cast<int>(what.get_error()) << '\n';
-		os << std::setw(12) << std::left << "uri" << what._source << '\n';
+		os << std::setw(12) << std::left << "uri" << what.as_string_view() << '\n';
 		for (component ii{}; ii != countof; ii = component(ii + 1))
 		{
 			if (what.test(ii))
@@ -579,9 +728,6 @@ public:
 		}
 		return os;
 	}
-
-	friend constexpr auto operator==(const basic_uri& lhs, const basic_uri& rhs) noexcept
-		{ return lhs._source == rhs._source; }
 
 protected:
 	static constexpr std::string make_uri(basic_uri ibase, comp_list ilist) noexcept
@@ -688,158 +834,32 @@ private:
 };
 
 //-----------------------------------------------------------------------------------------
-/// static storage
-template<size_t sz>
-class uri_storage
-{
-	std::array<char, sz> _buffer;
-	size_t _sz{};
-
-protected:
-	explicit constexpr uri_storage(std::string src) noexcept : _sz(src.size() > sz ? 0 : src.size())
-		{ std::copy_n(src.cbegin(), _sz, _buffer.begin()); }
-	explicit constexpr uri_storage(std::string_view sv) noexcept : uri_storage(std::string(sv)) {}
-	constexpr uri_storage() = default;
-	constexpr std::string swap(std::string src) noexcept
-	{
-		if (src.size() > sz)
-			return {};
-		std::string old(_buffer.cbegin(), _sz);
-		std::copy_n(src.cbegin(), _sz = src.size(), _buffer.begin());
-		return old;
-	}
-	constexpr std::string_view buffer() const noexcept { return {_buffer.cbegin(), _sz}; }
-	constexpr ~uri_storage() = default;
-public:
-	static constexpr auto max_storage() noexcept { return sz; }
-};
-
-//-----------------------------------------------------------------------------------------
-/// constexpr static storage
-template<size_t sz>
+template<size_t sz=1204, typename T=uri_storage<sz>>
 requires(sz > 0)
-class uri_storage_immutable
+class uri_static : public basic_uri<T>
 {
-	const std::array<char, sz> _buffer;
-
-	template<std::size_t... I>
-	constexpr uri_storage_immutable(std::span<const char, sz> sv, std::index_sequence<I...>) noexcept : _buffer{sv[I]...} {}
-
-protected:
-	constexpr uri_storage_immutable(std::span<const char, sz> sv) noexcept : uri_storage_immutable{sv, std::make_index_sequence<sz>{}} {}
-	constexpr uri_storage_immutable() = delete;
-	constexpr ~uri_storage_immutable() = default;
-	constexpr std::string_view buffer() const noexcept { return {_buffer.data(), sz}; }
 public:
-	static constexpr auto max_storage() noexcept { return sz; }
+   constexpr uri_static(auto sv) noexcept : basic_uri<T>{sv} {}
+   constexpr uri_static() = delete;
+   constexpr ~uri_static() = default;
 };
 
 //-----------------------------------------------------------------------------------------
-/// specialisation: dynamic storage
-template<>
-class uri_storage<0>
-{
-	std::string _buffer;
-protected:
-	constexpr uri_storage(std::string src) noexcept : _buffer(std::move(src)) {}
-	constexpr uri_storage() = default;
-	constexpr ~uri_storage() = default;
-	constexpr std::string swap(std::string src) noexcept { return std::exchange(_buffer, std::move(src)); }
-public:
-	constexpr std::string_view buffer() const noexcept { return _buffer; }
-	static constexpr auto max_storage() noexcept { return basic_uri::uri_max_len; }
-};
-
-//-----------------------------------------------------------------------------------------
-template<size_t sz>
-class uri_base : public uri_storage<sz>, public basic_uri
+template<size_t sz, typename T=const uri_storage_immutable<sz>>
+class uri_static_immutable : public basic_uri<T>
 {
 public:
-	constexpr uri_base(std::string src) noexcept
-		: uri_storage<sz>(std::move(src)), basic_uri(this->buffer()) {}
-	constexpr uri_base(std::string_view src) noexcept : uri_base(std::string(src)) {}
-	constexpr uri_base(const char *src) noexcept : uri_base(std::string(src)) {}
-	constexpr uri_base(std::span<const char, sz> sv) noexcept : uri_base{sv.begin(), sv.end()} {}
-	constexpr uri_base() = default;
-	constexpr ~uri_base() = default;
-
-	constexpr std::string replace(std::string src) noexcept
-	{
-		auto oldstr { this->swap(std::move(src)) };
-		assign(this->buffer());
-		return oldstr;
-	}
-	constexpr std::string make_edit(std::initializer_list<comp_pair> from) noexcept
-	{
-		basic_uri ibase;
-		comp_list ilist{countof};
-		for (component ii{}; ii != countof; ii = component(ii + 1))
-		{
-			if (test(ii))
-			{
-				ibase.set(ii);
-				ilist[ii] = get_component(ii);
-			}
-		}
-		for (const auto& [comp,str] : from)
-		{
-			if (comp < countof)
-			{
-				ibase.set(comp);
-				ilist[comp] = str;
-			}
-		}
-		if (!ibase.has_any())
-			return 0;
-		if (ibase.has_any_authority())
-			ibase.clear<authority>();
-		if (ibase.has_userinfo() && ibase.has_any_userinfo())
-			ibase.clear<userinfo>();
-		return make_uri(ibase, std::move(ilist));
-	}
-	constexpr int edit(std::initializer_list<comp_pair> from) noexcept
-	{
-		replace(make_edit(std::move(from)));
-		return count();
-	}
-	constexpr auto normalize() noexcept { return replace(normalize_str(this->get_uri())); }
-	constexpr auto normalize_http() noexcept { return replace(normalize_http_str(this->get_uri())); }
-
-	static constexpr auto factory(std::initializer_list<comp_pair> from) noexcept
-		{ return uri_base(make_uri(std::move(from))); }
-
-#if __has_include(<format>)
-	/// format helper
-	template<typename... Args>
-	static constexpr auto format(std::format_string<Args...> fmt, Args&&... args)
-		{ return uri_base(std::vformat(fmt.get(), std::make_format_args(args...))); }
-#endif
-
-	/// normalize equality
-	friend constexpr auto operator==(const uri_base& lhs, const uri_base& rhs) noexcept
-		{ return normalize_str(lhs.get_uri()) == normalize_str(rhs.get_uri()); }
-	/// normalize_http equality
-	friend constexpr auto operator%(const uri_base& lhs, const uri_base& rhs) noexcept
-		{ return normalize_http_str(lhs.get_uri()) == normalize_http_str(rhs.get_uri()); }
+   constexpr uri_static_immutable(std::span<const char, sz> sv) noexcept : basic_uri<T>{sv} {}
+   constexpr uri_static_immutable() = delete;
+   constexpr ~uri_static_immutable() = default;
 };
 
-//-----------------------------------------------------------------------------------------
-template<size_t sz>
-requires(sz > 0)
-class uri_static_base : public uri_storage_immutable<sz>, public basic_uri
-{
-public:
-	constexpr uri_static_base(std::span<const char, sz> sv) noexcept
-		: uri_storage_immutable<sz>{sv}, basic_uri{uri_storage_immutable<sz>::buffer()} {}
-	constexpr uri_static_base() = delete;
-	constexpr ~uri_static_base() = default;
-};
+template<std::size_t N>
+uri_static_immutable(const char(&)[N]) -> uri_static_immutable<N>;
 
 //-----------------------------------------------------------------------------------------
-using uri = uri_base<0>;
-
-template<size_t sz=1024>
-using uri_static = uri_base<sz>;
+using uri_view = basic_uri<>;
+using uri = basic_uri<std::string>;
 
 //-----------------------------------------------------------------------------------------
 } // FIX8
