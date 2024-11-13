@@ -51,7 +51,7 @@ using namespace std::literals::string_view_literals;
 //-----------------------------------------------------------------------------------------
 int main(int argc, char *argv[])
 {
-   static constexpr const char *optstr{"t:T:d:hlasxf:"};
+   static constexpr const char *optstr{"t:T:d:hlasxf:F:D:q"};
 	static constexpr auto long_options
 	{
 		std::to_array<option>
@@ -76,6 +76,7 @@ int main(int argc, char *argv[])
 	});
 
 	int val;
+	bool decode{}, quiet{};
 	try
 	{
 		if (argc <= 1)
@@ -94,129 +95,18 @@ int main(int argc, char *argv[])
 				std::cout << "Usage: " << argv[0] << " [uri...] [-" << optstr << "]" << R"(
  -a parse all examples (default)
  -d [uri] parse uri from CLI, show debug output
+ -D [uri] parse uri from CLI, show debug output - with normalize
  -h help
  -l list tests
  -s show sizes
- -f [file] read and dump from file
+ -f [file] read and process from file
+ -F [file] read and process from file - with normalize
  -T [num] static test to run
  -t [num] test to run
  -x special tests)" << '\n';
 				return 1;
+			case 'q': quiet ^= true; break;
 			case 'x':
-				{
-					/*
-					using namespace std::literals;
-					constexpr auto esv1 {"https://www.hello.com/au/page1"sv};
-					uri_storage<esv1.size()> us1{esv1};
-
-					using namespace std::literals;
-					constexpr auto svs { "https://www.hello.com/au/page1"sv };
-					constexpr auto svss { svs.size() };
-					const uri_static<svss> u1{svs};
-					std::cout << u1 << '\n' << u1.max_storage() << '\n' << svss << '\n';
-					for (uri::component ii{}; ii != uri::countof; ii = uri::component(ii + 1))
-					{
-						if (u1.test(ii))
-						{
-							const auto [pos,len] { u1[ii] };
-							std::cout << uri::get_name(ii) << ' ' << pos << " (" << len << ")\n";
-						}
-					}
-					*/
-
-					//const uri_fixed<"https://www.hello.com/au/page1"> u1;
-					/*
-					static constexpr uri_fixed<"https://user:password@example.com/path?search=1"> u1;
-					static constexpr uri_fixed<"https://hello.com/path?search=1"> u2;
-					std::cout << u1 << '\n';
-					std::cout << u1.max_storage() << '\n';
-					std::cout << sizeof(u1) << '\n';
-					std::cout << u2 << '\n';
-					std::cout << u2.max_storage() << '\n';
-					std::cout << sizeof(u2) << '\n';
-					uri_fixed<"telnet://192.0.2.16:80/"> u3;
-					std::cout << u3 << '\n';
-					std::cout << "max storage: " << u3.max_storage() << '\n';
-					std::cout << "total object size: " << sizeof(u3) << '\n';
-					*/
-					/*
-					static constexpr std::array uris
-					{
-						"https://www.blah.com:3000/test",
-						"https://dakka@www.staylate.net:3000/",
-						"https://www.buyexample.com/over/there?name=ferret&time=any#afrag",
-					};
-					for (const auto& pp : uris)
-						std::cout << basic_uri(pp).get_component(host) << '\n';
-						*/
-					//static constexpr uri_fixed<"telnet://user:password@192.0.2.16:80/"> u1;
-					/*
-					static const std::array fixes { std::to_array<std::any>
-					({
-					 	{ uri_fixed<"telnet://user:password@192.0.2.16:80/">() },
-						{ uri_fixed<"https://www.blah.com:3000/test">() },
-						{ uri_fixed<"https://dakka@www.blah.com:3000/">() },
-						{ uri_fixed<"https://example.com/over/there?name=ferret&time=any#afrag">() },
-					})};
-					auto ptr { std::make_unique<uri_fixed<"telnet://user:password@192.0.2.16:80/">>() };
-					std::cout << sizeof(uri_fixed<"telnet://user:password@192.0.2.16:80/">) << '\n';
-					std::cout << *ptr << '\n';
-					*/
-					/*
-					using namespace std::literals;
-					static constexpr std::array uris
-					{
-						"https://www.blah.com:3000/test"sv,
-						"https://dakka@www.staylate.net:3000/"sv,
-						"https://www.buyexample.com/over/there?name=ferret&time=any#afrag"sv,
-					};
-					for (const auto& pp : uris)
-					{
-						std::cout << typeid(pp).name() << '\n';
-						std::cout << basic_uri(pp).get_component(uri::host) << '\n';
-					}
-					static constexpr auto strv { "HTTPS://WWW.HELLO.COM/path/%62%6c%6f%67/%75%72%6c%73"sv };
-					auto result { uri::normalize(strv) };
-					std::cout << strv << '\n' << result << '\n';
-					*/
-					/*
-					static constexpr std::array uris
-					{
-						"HTTPS://WWW.HELLO.COM/path/%62%6c%6f%67/%75%72%6c%73"sv,
-						"HTTPS://WWW.HELLO.COM/path/../this/./blah/blather/../end"sv,
-						"https://www.buyexample.com/./begin/one-removed/../two-removed/../three-removed/../end?name=ferret&time=any#afrag"sv,
-						"https://www.buyexample.com/.././.././"sv,
-						"https://www.test.com"sv,
-						"https://www.nochange.com/"sv,
-						"https://www.boost.org/doc/../index.html"sv,
-						"http://www.boost.org:80/doc/../index.html"sv,
-						"https://www.boost.org:443/doc/../index.html"sv,
-						"https://www.boost.org:8080/doc/../index.html"sv,
-					};
-					for (int ii{}; const auto& pp : uris)
-					{
-						auto result { uri::normalize_http_str(pp) };
-						std::cout << ii++ << " before: " << pp << '\n' << "after:  " << result << '\n' << '\n';
-					}
-					*/
-					/*
-					std::cout << basic_uri::encode_hex("The rain in Spain") << '\n';
-					std::cout << basic_uri::encode_hex("/path/blog/urls"sv) << '\n';
-					//const auto u4 { uri::factory({{scheme, "file"}, {authority, ""}, {path, "/foo/" + basic_uri::encode_hex("this path has embedded spaces") + "/test/node.js"}}) };
-					const auto u4 { uri::factory({{scheme, "https"}, {user, "dakka"},
-						{host, "www.blah.com"}, {port, "3000"}, {path, "/foo/" + basic_uri::encode_hex("this path has embedded spaces") + "/test"}}) };
-					std::cout << u4 << '\n';
-					uri_static<64> u3{tests[35].first};
-					std::cout << u3 << '\n';
-					auto u1 { uri::format("{}://{}:{}/rfc/{}", "https", "www.ietf.org", 80, "rfc2396.txt") };
-					auto u2 { uri_static<128>::format("{0}://{2}:{1}/{3}{4}{3}", "https", 80, "www.ietf.org", "abra", "cad") };
-					std::cout << u1 << '\n';
-					std::cout << u2 << '\n';
-					auto u4 { uri::format("{}://{}@{}:{}/{}/{}/{}", "https", "dakka", "www.blah.com", "3000", "foo",
-						basic_uri::encode_hex("this path has embedded spaces"), "test") };
-					std::cout << u4 << '\n';
-					*/
-				}
 				break;
 			case 'l':
 				for (int ii{}; const auto& [src,vec] : tests)
@@ -234,9 +124,14 @@ int main(int argc, char *argv[])
 				else
 					std::cout << uri{tests[tnum].first};
 				break;
+			case 'D':
+				decode = true;
+				[[fallthrough]];
 			case 'd':
 				{
-					const uri u1{optarg};
+					uri u1{decode ? uri::encode_hex_spaces(optarg) : std::string(optarg)};
+					if (decode)
+						u1.normalize();
 					if (!u1)
 						std::cout << "error " << static_cast<int>(u1.get_error()) << '\n';
 					std::cout << u1 << "bitset " << std::bitset<uri::countof>(u1.get_present()) << " ("
@@ -251,6 +146,9 @@ int main(int argc, char *argv[])
 					}
 				}
 				break;
+			case 'F':
+				decode = true;
+				[[fallthrough]];
 			case 'f':
 				if (std::ifstream ifs(optarg); ifs)
 				{
@@ -269,10 +167,12 @@ int main(int argc, char *argv[])
 								sv.remove_prefix(1);
 							if (sv.ends_with(R"(",)"))
 								sv.remove_suffix(2);
-							const basic_uri u1{sv};
+							uri u1{decode ? uri::encode_hex_spaces(sv) : std::string(sv)};
+							if (decode)
+								u1.normalize();
 							if (!u1)
 								err_uris.push_back(std::make_pair(u1.get_error(), std::string{sv}));
-							else
+							else if (!quiet)
 							{
 								std::cout << u1 << "bitset " << std::bitset<uri::countof>(u1.get_present()) << " ("
 									<< std::hex << std::showbase << u1.get_present() << std::dec << std::noshowbase << ")\n";
@@ -284,14 +184,14 @@ int main(int argc, char *argv[])
 										std::cout << uri::get_name(ii) << ' ' << pos << " (" << len << ")\n";
 									}
 								}
+								std::cout << '\n';
 							}
-							std::cout << '\n';
 							++cnt;
 						}
 					}
 					for(const auto& [err,ur] : err_uris)
 						std::cout << static_cast<int>(err) << ": " << ur << '\n';
-					std::cout << cnt << " uri(s) read from " << optarg << ", " << err_uris.size() << " errors, longest uri was " << longest << '\n';
+					std::cout << cnt << " uri(s) read from '" << optarg << "', " << err_uris.size() << " errors, longest uri was " << longest << '\n';
 				}
 				break;
 			case 's':
