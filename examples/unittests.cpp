@@ -212,9 +212,9 @@ TEST_CASE("replace")
 	REQUIRE(u1.get_component(host) == "example.com");
 	REQUIRE(u2.get_component(host) == "www.blah.com");
 
-	uri_static<> u3{src};
+	uri_static u3{src};
 	REQUIRE(u3.get_component(host) == "www.blah.com");
-	uri_static<> u4{u3.replace(src1)};
+	uri_static u4{u3.replace(src1)};
 	REQUIRE(u3.get_component(host) == "example.com");
 	REQUIRE(u4.get_component(host) == "www.blah.com");
 }
@@ -249,7 +249,7 @@ TEST_CASE("limits")
 	uri u1{buff};
 	REQUIRE_FALSE(u1);
 	REQUIRE(u1.get_error() == uri::error_t::too_long);
-	uri_static<> u2{buff}; // too long
+	uri_static u2{buff}; // too long
 	REQUIRE(u2.get_uri() == "");
 	uri_static<64> u3{tests[35].first};
 	REQUIRE_FALSE(u3);
@@ -360,12 +360,14 @@ fragment    test
 	};
 
 	std::ostringstream ostr;
-	uri_view u1{tests[9].first};
-	u1.print(ostr);
-	REQUIRE(ostr.str() == str);
+	ostr << uri::detailed << uri_view(tests[9].first);
+	REQUIRE(ostr.view() == str);
 	ostr.str("");
-	ostr << u1;
-	REQUIRE(ostr.str() == tests[9].first);
+	ostr << uri::default_mode << uri_view(tests[9].first);
+	REQUIRE(ostr.view() == tests[9].first);
+	ostr.str("");
+	ostr << uri_view(tests[9].first);
+	REQUIRE(ostr.view() == tests[9].first);
 }
 
 //-----------------------------------------------------------------------------------------
@@ -395,10 +397,45 @@ TEST_CASE("decode hex")
 }
 
 //-----------------------------------------------------------------------------------------
+TEST_CASE("decode url")
+{
+	static constexpr auto uris
+	{
+		std::to_array<std::pair<std::string_view, std::string_view>>
+		({
+			{ "https://example.com/query%3Fvalue%3D42", "https://example.com/query?value=42" },
+			{ "https://example.com/search?q=1%2F2", "https://example.com/search?q=1/2" },
+			{ "https://example.com/hello%20world", "https://example.com/hello world" },
+			{ "https://example.com/file%3Aname", "https://example.com/file:name" },
+			{ "https://example.com%23section%231", "https://example.com#section#1" },
+			{ "https://example.com/some%20path%3Fwith%20%26special%24chars", "https://example.com/some path?with &special$chars" },
+			{ "https://example.com/%7Euser%2Fprofile", "https://example.com/~user/profile" },
+			{ "https://example.com/%40mentions%3Ffilter%3D%40all", "https://example.com/@mentions?filter=@all" },
+			{ "https://example.com/file%2520name", "https://example.com/file%20name" },
+			{ "https://example.com/search%3Fq%3D10%252F20%252F30", "https://example.com/search?q=10%2F20%2F30" },
+			{ "https://example.com/path%3Fid%3D%2525encoded", "https://example.com/path?id=%25encoded" },
+			{ "https://example.com/test%2Bcase%3Fvalue%3D1%2B2", "https://example.com/test+case?value=1+2" },
+			{ "https://example.com/a%26b%3Dc%26d", "https://example.com/a&b=c&d" },
+			{ "https://example.com/%3Fencoded%3Dtrue%26value%3D%2526data", "https://example.com/?encoded=true&value=%26data" },
+			{ "https://example.com/%5Barray%5D%3D1%2C2%2C3", "https://example.com/[array]=1,2,3" }
+		})
+	};
+
+	for (int ii{}; auto [bef,aft] : uris)
+	{
+		INFO("uri(" << ii++ << "): " << bef);
+		REQUIRE(uri_view::decode_hex(bef) == aft);
+	}
+}
+
+//-----------------------------------------------------------------------------------------
 TEST_CASE("encode hex")
 {
 	const std::string str {"/foo/" + uri_view::encode_hex("this path has embedded spaces") + "/test/node.js"};
 	REQUIRE(str == "/foo/this%20path%20has%20embedded%20spaces/test/node.js"sv);
+	const std::string str1 {uri_view::encode_hex("/foo/this path has embedded spaces/test/node.js", false)};
+	REQUIRE(str1 == "%2F%66%6F%6F%2F%74%68%69%73%20%70%61%74%68%20%68%61%73%20%65%6D%62%65%64%64"
+						 "%65%64%20%73%70%61%63%65%73%2F%74%65%73%74%2F%6E%6F%64%65%2E%6A%73"sv);
 }
 
 //-----------------------------------------------------------------------------------------
@@ -534,13 +571,35 @@ TEST_CASE("edit")
 template<typename T>
 void do_add()
 {
+	static const uri::query_result tbl { { "first", "1st" }, { "second", "2nd" }, { "third", "3rd" } };
+
 	T u1 { "https://dakka@www.blah.com:3000/" };
 	u1.add_path("/newpath");
 	REQUIRE(u1.get_uri() == "https://dakka@www.blah.com:3000/newpath");
 
+	T u2 { "https://example.com/" };
+	u2.add_fragment("hello");
+	REQUIRE(u2.get_uri() == "https://example.com/#hello");
+
+	T u3 { "https://example.com/" };
+	u3.add_query(tbl);
+	REQUIRE(u3.get_uri() == "https://example.com/?first=1st&second=2nd&third=3rd");
+
+	T u5 { "https://example.com/" };
+	u5.template add_query<';'>(tbl);
+	REQUIRE(u5.get_uri() == "https://example.com/?first=1st;second=2nd;third=3rd");
+
+	T u7 { "https://example.com/" };
+	u7.add_query("first=1st&second=2nd&third=3rd");
+	REQUIRE(u7.get_uri() == "https://example.com/?first=1st&second=2nd&third=3rd");
+
 	T u4 { "https://example.com/?search=1" };
 	u4.add_userinfo("dakka:pass123@");
 	REQUIRE(u4.get_uri() == "https://dakka:pass123@example.com/?search=1");
+
+	T u6 { "https://example.com/" };
+	u6.add_path("this+way home", true); // encode
+	REQUIRE(u6.get_uri() == "https://example.com/this%2Bway%20home");
 }
 
 TEST_CASE("add")
@@ -570,6 +629,10 @@ void do_remove()
 	REQUIRE(u5.get_uri() == "https:///?search=1");
 	u5.remove_scheme();
 	REQUIRE(u5.get_uri() == "/?search=1");
+
+	T u7 { "https://dakka@www.blah.com:3000/newpath/subdir" };
+	u7.remove_path();
+	REQUIRE(u7.get_uri() == "https://dakka@www.blah.com:3000");
 };
 
 TEST_CASE("remove")
@@ -614,15 +677,6 @@ TEST_CASE("uri_fixed")
 	};
 	REQUIRE(u2.get_port() == "89");
 }
-
-//-----------------------------------------------------------------------------------------
-/*
-TEST_CASE("uri_fixed")
-{
-	uri_fixed<"https://gitter.im/t1gor/Robots.txt-Parser-Class/archives"> test;
-	REQUIRE(test.get_host() == "gitter.im");
-}
-*/
 
 //-----------------------------------------------------------------------------------------
 TEST_CASE("for_each")
@@ -721,3 +775,20 @@ TEST_CASE("host_as_ipv4")
 	REQUIRE_FALSE(u2.host_is_ipv4());
 	REQUIRE(u2.host_as_ipv4() == 0);
 }
+
+//-----------------------------------------------------------------------------------------
+TEST_CASE("copy ctor")
+{
+	// other copy
+	constexpr uri_fixed u1{"https://dakka@www.blah.com:3000/"};
+	uri_view cp1{u1};
+	REQUIRE(cp1.view() == u1.view());
+	REQUIRE(cp1.get_ranges() == u1.get_ranges());
+
+	// same copy
+	constexpr uri_view u2{"https://dakka@www.blah.com:3000/"};
+	auto cp2{u2};
+	REQUIRE(cp2.view() == u2.view());
+	REQUIRE(cp2.get_ranges() == u2.get_ranges());
+}
+

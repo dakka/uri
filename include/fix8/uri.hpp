@@ -45,13 +45,13 @@
 #include <compare>
 #include <functional>
 #include <concepts>
-#if __has_include(<format>)
-# include <format>
-#endif
 #include <vector>
 #include <list>
 #include <algorithm>
 #include <bit>
+#if __has_include(<format>)
+# include <format>
+#endif
 
 //-----------------------------------------------------------------------------------------
 namespace FIX8 {
@@ -114,10 +114,7 @@ struct uri_common
 {
 	std::uint16_t _present{};
 
-	using value_pair = std::pair<std::string_view, std::string_view>;
-	using query_result = std::vector<value_pair>;
 	using uri_len_t = std::uint16_t;
-	using range_pair = std::pair<uri_len_t, uri_len_t>; // offset, len
 	enum component { scheme, authority, userinfo, user, password, host, port, path, query, fragment, countof };
 	enum class error_t : uri_len_t { no_error, too_long, illegal_chars, empty_src, countof };
 	enum class scheme_t
@@ -126,10 +123,6 @@ struct uri_common
 		mysql, ntp, pop3, pop3s, postgresql, rdp, redis, sftp, sip, sip_tls, smtp, smtps, sqlserver, ssh, telnet,
 		tftp, xmpp, countof
 	};
-	using comp_pair = std::pair<component, std::string_view>;
-	using comp_list = std::vector<std::string_view>;
-	using segments = comp_list;
-	using port_pair = value_pair;
 
 	static constexpr int all_components {(1 << countof) - 1};
 	static constexpr auto uri_max_len {std::numeric_limits<uri_len_t>::max()};
@@ -146,8 +139,7 @@ struct uri_common
 		else
 			_present = all_components;
 	}
-	constexpr void clear(component what) noexcept
-		{ what == countof ? _present = 0 : _present &= ~(1 << what); }
+	constexpr void clear(component what) noexcept { what == countof ? _present = 0 : _present &= ~(1 << what); }
 
 	template<component what>
 	constexpr void clear() noexcept
@@ -175,10 +167,8 @@ struct uri_common
 	constexpr void clear_all() noexcept { (clear<comp>(),...); }
 
 	constexpr bool has_any() const noexcept { return _present; }
-	constexpr bool has_any_authority() const noexcept
-		{ return test_any<host,password,port,user,userinfo>(); }
-	constexpr bool has_any_userinfo() const noexcept
-		{ return test_any<password,user>(); }
+	constexpr bool has_any_authority() const noexcept { return test_any<host,password,port,user,userinfo>(); }
+	constexpr bool has_any_userinfo() const noexcept { return test_any<password,user>(); }
 
 	// syntactic sugar has
 #define df(x) \
@@ -203,11 +193,36 @@ struct uri_common
 };
 
 //-----------------------------------------------------------------------------------------
+inline int get_print_mode_index()
+{
+	static int index { std::ios_base::xalloc() };
+	return index;
+}
+
+//-----------------------------------------------------------------------------------------
 template<typename T>
 class basic_uri : public uri_common
 {
 	T _source;
-	std::array<range_pair, component::countof> _ranges{};
+
+public:
+	using range_pair = std::pair<uri_len_t, uri_len_t>; // offset, len
+	using value_pair = std::pair<std::string_view, std::string_view>;
+	using query_result = std::vector<value_pair>;
+	using comp_pair = std::pair<component, std::string_view>;
+	using comp_list = std::vector<std::string_view>;
+	using segments = comp_list;
+	using port_pair = value_pair;
+	using ranges = std::array<range_pair, component::countof>;
+
+	enum class print_mode { default_mode, detailed };
+	struct detailed_t{};
+	static constexpr detailed_t detailed{};
+	struct default_t{};
+	static constexpr default_t default_mode{};
+
+private:
+	ranges _ranges{};
 
 	static constexpr std::array _component_names { "scheme", "authority", "userinfo", "user", "password", "host", "port", "path", "query", "fragment", };
 	static constexpr std::string_view _hexds { "0123456789ABCDEF" }, _reserved { ":/?#[]@!$&'()*+,;=" };
@@ -221,25 +236,37 @@ class basic_uri : public uri_common
 		{ "xmpp ", "5222" },
 	})};
 
+	static constexpr char cvt_hex_octet(char c) noexcept { return (c & 0xF) + (c >> 6) * 9; }
+
+public:
 	static constexpr bool is_reserved(char c) noexcept { return _reserved.find_first_of(c) != std::string_view::npos; }
 	static constexpr bool is_unreserved(char c) noexcept { return std::isalnum(c) || c == '-' || c == '.' || c == '_' || c == '~'; }
-	static constexpr bool is_unreserved_ascii(std::string_view src) noexcept // is %XX unreserved?
+	static constexpr bool is_unreserved_as_hex(std::string_view src) noexcept // is %XX unreserved?
 		{ return is_unreserved(cvt_hex_octet(src[1]) << 4 | cvt_hex_octet(src[2])); }
-	static constexpr bool query_comp(const value_pair& pl, const value_pair& pr) noexcept { return pl.first < pr.first; }
-	template<typename Fn>
-	static constexpr bool tuple_comp(const std::tuple<component, Fn>& pl, const std::tuple<component, Fn>& pr) noexcept
-		{ return std::get<component>(pl) < std::get<component>(pr); }
-	static constexpr char cvt_hex_octet(char c) noexcept { return (c & 0xF) + (c >> 6) * 9; }
+	static constexpr std::string_view::size_type find_hex(std::string_view src, std::string_view::size_type pos=0) noexcept
+	{
+		for (std::string_view::size_type fnd{pos}; ((fnd = src.find_first_of('%', fnd))) != std::string_view::npos && fnd + 2 < src.size(); ++fnd)
+			if (std::isxdigit(static_cast<unsigned char>(src[fnd + 1])) && std::isxdigit(static_cast<unsigned char>(src[fnd + 2])))
+				return fnd;
+		return std::string_view::npos;
+	}
+	static constexpr bool has_hex(std::string_view src) noexcept { return find_hex(src) != std::string_view::npos; }
 	static constexpr std::string& decode_to(std::string& result, bool unreserved) // inplace decode
 	{
 		for (std::string_view::size_type fnd{}; ((fnd = find_hex(result, fnd))) != std::string_view::npos;)
-			if (unreserved ? is_unreserved_ascii(result.substr(fnd, 3)) : true)
+		{
+			if (static_cast<std::string_view>(result).substr(fnd, 3) == "%25")	// special case for literal '%'
+				result.erase(++fnd, 2);
+			else if (unreserved ? is_unreserved_as_hex(static_cast<std::string_view>(result).substr(fnd, 3)) : true)
 				result.replace(fnd, 3, 1, cvt_hex_octet(result[fnd + 1]) << 4 | cvt_hex_octet(result[fnd + 2]));
 			else
 				fnd += 3;
+		}
 		return result;
 	}
 
+private:
+	static constexpr bool query_comp(const value_pair& pl, const value_pair& pr) noexcept { return pl.first < pr.first; }
 	static constexpr uint32_t ipv4_to_uint32(std::string_view sv)
 	{
 		uint32_t result{};
@@ -280,13 +307,21 @@ public:
    constexpr basic_uri(std::string src) noexcept : _source{src} { parse(); }
 	template<std::size_t sz>
    explicit constexpr basic_uri(std::span<const char, sz> sv) noexcept : _source{sv} { parse(); }
+
+   constexpr basic_uri(const basic_uri& from) = default;
+
+	template<typename U>
+	requires (!std::same_as<U, T>)
+   constexpr basic_uri(const basic_uri<U>& from) noexcept : _source{from.view()}, _ranges{from.get_ranges()} {}
+
    constexpr basic_uri() = default;
    constexpr ~basic_uri() = default;
 
-   constexpr std::string_view as_string_view() const noexcept
+   constexpr std::string_view view() const noexcept
 		requires(std::derived_from<std::string_view,T> || std::derived_from<std::string,T>) { return _source; }
-   constexpr std::string_view as_string_view() const noexcept { return {_source.data(), _source.size()}; }
+   constexpr std::string_view view() const noexcept { return {_source.data(), _source.size()}; }
    constexpr T& get_source() const noexcept { return _source; }
+	constexpr const ranges& get_ranges() const noexcept { return _ranges; }
    constexpr const char *data() const noexcept { return _source.data(); }
    constexpr auto size() const noexcept { return _source.size(); }
 	constexpr int assign(T src) noexcept requires is_mutable<T>
@@ -301,23 +336,23 @@ public:
    constexpr auto max_size() const noexcept
 		requires (requires(T t) { { t.max_size() } -> std::same_as<typename T::size_type>; }) { return _source.max_size(); }
 
-	constexpr std::string_view get_uri() const noexcept { return as_string_view(); }
+	constexpr std::string_view get_uri() const noexcept { return view(); }
 
 	template<component what>
 	constexpr std::string_view get_component() const noexcept
 	{
 		if constexpr (what < countof)
-			return as_string_view().substr(_ranges[what].first, _ranges[what].second);
+			return view().substr(_ranges[what].first, _ranges[what].second);
 		else
 			return std::string_view();
 	}
 	constexpr std::string_view get_component(component what) const noexcept
-		{ return what < countof ? as_string_view().substr(_ranges[what].first, _ranges[what].second) : std::string_view(); }
+		{ return what < countof ? view().substr(_ranges[what].first, _ranges[what].second) : std::string_view(); }
 
-	/*! Provides const direct access to the offset and length of the specifed component and is used to create a `std::string_view`.
+	/*! Provides a copy of the offset and length of the specifed component and is used to create a `std::string_view`.
 	  	\param idx index into table
-		\return a `const range_pair&` which is a `std::pair<uri_len_t, uri_len_t>&` to the specified component at the index given in the ranges table. */
-	constexpr const range_pair& operator[](component idx) const noexcept { return _ranges[idx]; }
+		\return a `range_pair` which is a `std::pair<uri_len_t, uri_len_t>` of the specified component at the index given in the ranges table. */
+	constexpr range_pair operator[](component idx) const noexcept { return _ranges[idx]; }
 
 	template<component what>
 	constexpr const range_pair& at() const noexcept { return _ranges[what]; }
@@ -342,7 +377,7 @@ public:
 	// syntactic sugar get,add,remove
 #define df(x) \
 	constexpr std::string_view get_##x() const noexcept { return get_component<x>(); } \
-	constexpr auto& add_##x(std::string_view what) requires is_mutable<T> { return edit({{x, what}}); } \
+	constexpr auto& add_##x(std::string_view what, bool encode=false) requires is_mutable<T> { return edit({{x, what}}, encode); } \
 	constexpr auto& remove_##x() requires is_mutable<T> { return edit({{x, ""}}); }
 	df(scheme); df(authority); df(userinfo); df(user); df(password); df(host); df(port); df(path); df(query); df(fragment);
 #undef df
@@ -350,7 +385,7 @@ public:
 	constexpr int parse() noexcept
 	{
 		using namespace std::literals::string_view_literals;
-		auto svsrc { as_string_view() };
+		auto svsrc { view() };
 		while(true)
 		{
 			if (svsrc.empty())
@@ -541,6 +576,26 @@ public:
 		return result;
 	}
 
+	template<char valuepair='&',char valueequ='='>
+	constexpr auto& add_query(const query_result& from) requires is_mutable<T>
+	{
+		std::string result;
+		for (bool first{true}; auto [tag,val] : from)
+		{
+			if(!first)
+				result += valuepair;
+			else
+				first = false;
+			result += tag;
+			if (!val.empty())
+			{
+				result += valueequ;
+				result += val;
+			}
+		}
+		return add_query(result);
+	}
+
    /// for_each
    template<typename Fn, typename... Args>
    requires std::invocable<Fn&&, comp_pair, Args...>
@@ -552,7 +607,7 @@ public:
       return std::bind(std::forward<Fn>(func), std::placeholders::_1, std::forward<Args>(args)...);
    }
 
-   template<typename Fn, typename C, typename... Args> // specialisation for member function with object
+   template<typename Fn, typename C, typename... Args> // specialisation for member function
    requires std::invocable<Fn&&, C, comp_pair, Args...>
    [[maybe_unused]] constexpr auto for_each(Fn&& func, C *obj, Args&&... args) const noexcept
    {
@@ -611,7 +666,7 @@ private:
 		return called;
 	}
 
-	constexpr std::string make_edit(std::initializer_list<comp_pair> from) const noexcept
+	constexpr std::string make_edit(std::initializer_list<comp_pair> from, bool encode=false) const noexcept
 	{
 		uri_common ibase;
 		std::unordered_map<component, std::string_view> ilmap;
@@ -660,19 +715,19 @@ private:
 		comp_list ilist{countof};
 		for(const auto& [comp,str] : ilmap)
 			ilist[comp] = str;
-		return make_uri(ibase, std::move(ilist));
+		return make_uri(ibase, std::move(ilist), encode);
 	}
 
 public:
 	constexpr std::string replace(std::string src) noexcept requires is_mutable<T>
 	{
-		std::string old{as_string_view()};
+		std::string old{view()};
 		assign(src);
 		return old;
 	}
-	constexpr auto& edit(std::initializer_list<comp_pair> from) noexcept requires is_mutable<T>
+	constexpr auto& edit(std::initializer_list<comp_pair> from, bool encode=false) noexcept requires is_mutable<T>
 	{
-		assign(make_edit(std::move(from)));
+		assign(make_edit(std::move(from), encode));
 		return *this;
 	}
 	constexpr auto normalize() requires is_mutable<T> { return replace(normalize_str(this->get_uri())); }
@@ -680,27 +735,6 @@ public:
 
 	constexpr bool host_is_ipv4() const noexcept { return has_host() && is_valid_ipv4(get_host()); }
 	constexpr uint32_t host_as_ipv4() const noexcept { return host_is_ipv4() ? ipv4_to_uint32(get_host()) : 0; };
-
-	constexpr std::ostream& print(std::ostream& os) const
-	{
-		if (!count())
-			os << "error_t: " << static_cast<int>(get_error()) << '\n';
-		os << std::setw(12) << std::left << "uri" << as_string_view() << " (" << size() << ")\n";
-		for_each([&os,this](comp_pair cp)
-		{
-			os << std::setw(12) << std::left << get_name(std::get<component>(cp))
-				<< (!std::get<1>(cp).empty() ? std::get<1>(cp) : "(empty)") << '\n';
-			if (std::get<component>(cp) == path)
-				if (const auto presult { decode_segments() }; presult.size() > 1)
-					for (const auto tag : presult)
-						os << "   " << (!tag.empty() ? tag : "(empty)") << '\n';
-			if (std::get<component>(cp) == query)
-				if (const auto qresult { decode_query() }; qresult.size() > 1)
-					for (const auto [tag,value] : qresult)
-						os << "   " << std::setw(12) << std::left << tag << (!value.empty() ? value : "(empty)") << '\n';
-		});
-		return os;
-	}
 
 	/// static methods --------------------------------------------------------------------------------
 	static constexpr void sort_query(query_result& query) noexcept { std::sort(query.begin(), query.end(), query_comp); }
@@ -716,14 +750,6 @@ public:
 		return result.first == result.second ? std::string_view() : result.first->second;
 
 	}
-	static constexpr std::string_view::size_type find_hex(std::string_view src, std::string_view::size_type pos=0) noexcept
-	{
-		for (std::string_view::size_type fnd{pos}; ((fnd = src.find_first_of('%', fnd))) != std::string_view::npos && fnd + 2 < src.size(); ++fnd)
-			if (std::isxdigit(static_cast<unsigned char>(src[fnd + 1])) && std::isxdigit(static_cast<unsigned char>(src[fnd + 2])))
-				return fnd;
-		return std::string_view::npos;
-	}
-	static constexpr bool has_hex(std::string_view src) noexcept { return find_hex(src) != std::string_view::npos; }
 	static constexpr std::string decode_hex(std::string_view src, bool unreserved=false)
 	{
 		std::string result{src};
@@ -827,13 +853,13 @@ public:
 		return result;
 	}
 
-	static constexpr std::string encode_hex(std::string_view src)
+	static constexpr std::string encode_hex(std::string_view src, bool canonical=true)
 	{
 		std::string result;
 		for (const auto pp : src)
 		{
-			if (is_reserved(pp) || std::isspace(pp) || !std::isprint(static_cast<unsigned char>(pp)))
-				result += {'%', _hexds[pp >> 4], _hexds[pp & 0xF]};
+			if (canonical ? is_reserved(pp) || !is_unreserved(pp) : true)
+				result += {'%', _hexds[static_cast<int>(pp) >> 4], _hexds[static_cast<int>(pp) & 0xF]};
 			else
 				result += pp;
 		}
@@ -848,7 +874,7 @@ public:
 		return result;
 	}
 
-	static constexpr std::string make_uri(std::initializer_list<comp_pair> from) noexcept
+	static constexpr std::string make_uri(std::initializer_list<comp_pair> from, bool encode=false) noexcept
 	{
 		uri_common ibase;
 		comp_list ilist{countof};
@@ -860,11 +886,11 @@ public:
 				ilist[comp] = str;
 			}
 		}
-		return make_uri(ibase, std::move(ilist));
+		return make_uri(ibase, std::move(ilist), encode);
 	}
 
-	static constexpr auto factory(std::initializer_list<comp_pair> from) noexcept
-		{ return basic_uri<std::string>(make_uri(std::move(from))); }
+	static constexpr auto factory(std::initializer_list<comp_pair> from, bool encode=false) noexcept
+		{ return basic_uri<std::string>(make_uri(std::move(from), encode)); }
 
 #if __has_include(<format>)
 	/// format helper
@@ -872,6 +898,39 @@ public:
 	static constexpr auto format(std::format_string<Args...> fmt, Args&&... args)
 		{ return U(std::vformat(fmt.get(), std::make_format_args(args...))); }
 #endif
+
+	friend std::ostream& operator<<(std::ostream& os, print_mode mode)
+	{
+		os.iword(get_print_mode_index()) = static_cast<long>(mode);
+		return os;
+	}
+	friend std::ostream& operator<<(std::ostream& os, detailed_t) { return os << print_mode::detailed; }
+	friend std::ostream& operator<<(std::ostream& os, default_t) { return os << print_mode::default_mode; }
+	friend std::ostream& operator<<(std::ostream& os, const basic_uri& what)
+	{
+		if (static_cast<print_mode>(os.iword(get_print_mode_index())) == print_mode::detailed)
+		{
+			if (!what.count())
+				os << "error_t: " << static_cast<int>(what.get_error()) << '\n';
+			os << std::setw(12) << std::left << "uri" << what.view() << " (" << what.size() << ")\n";
+			what.for_each([&os,&what](comp_pair cp)
+			{
+				os << std::setw(12) << std::left << what.get_name(std::get<component>(cp))
+					<< (!std::get<1>(cp).empty() ? std::get<1>(cp) : "(empty)") << '\n';
+				if (std::get<component>(cp) == path)
+					if (const auto presult { what.decode_segments() }; presult.size() > 1)
+						for (const auto tag : presult)
+							os << "   " << (!tag.empty() ? tag : "(empty)") << '\n';
+				if (std::get<component>(cp) == query)
+					if (const auto qresult { what.decode_query() }; qresult.size() > 1)
+						for (const auto [tag,value] : qresult)
+							os << "   " << std::setw(12) << std::left << tag << (!value.empty() ? value : "(empty)") << '\n';
+			});
+		}
+		else
+			os << what.get_uri();
+		return os;
+	}
 
 	friend constexpr bool operator==(const basic_uri& lhs, const basic_uri& rhs) noexcept
 		{ return lhs._source == rhs._source; }
@@ -882,10 +941,8 @@ public:
 	friend constexpr bool operator%(const basic_uri& lhs, const basic_uri& rhs)
 		{ return normalize_http_str(lhs.get_uri()) == normalize_http_str(rhs.get_uri()); }
 
-	friend std::ostream& operator<<(std::ostream& os, const basic_uri& what) { return os << what.get_uri(); }
-
 protected:
-	static constexpr std::string make_uri(uri_common ibase, comp_list ilist) noexcept
+	static constexpr std::string make_uri(uri_common ibase, comp_list ilist, bool encode=false) noexcept
 	{
 		if (!ibase.has_any())
 			return {};
@@ -896,7 +953,7 @@ protected:
 		{
 			if (!ibase.test(ii) || done.test(ii))
 				continue;
-			switch(auto str{ilist[ii]}; ii)
+			switch(std::string str{encode ? encode_hex(ilist[ii]) : ilist[ii]}; ii)
 			{
 			case scheme:
 				if (!str.empty())
@@ -948,7 +1005,12 @@ protected:
 				}
 				break;
 			case path:
-				result += str;
+				if (!str.empty())
+				{
+					if (!result.ends_with('/') && !str.starts_with('/') && !result.ends_with(':'))
+						result += '/';
+					result += str;
+				}
 				break;
 			case query:
 				if (!str.empty())

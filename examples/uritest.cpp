@@ -48,12 +48,13 @@ using namespace std::literals::string_view_literals;
 //-----------------------------------------------------------------------------------------
 int main(int argc, char *argv[])
 {
-   static constexpr const char *optstr{"t:T:d:hlasxf:F:D:q"};
+   static constexpr const char *optstr{"t:T:d:hlasxf:F:D:qV"};
 	static constexpr auto long_options
 	{
 		std::to_array<option>
 		({
 			{ "help",	no_argument,			nullptr, 'h' },
+			{ "verbose",no_argument,			nullptr, 'V' },
 			{ "list",	no_argument,			nullptr, 'l' },
 			{ "sizes",	no_argument,			nullptr, '2' },
 			{ "all",		no_argument,			nullptr, 'a' },
@@ -65,15 +66,16 @@ int main(int argc, char *argv[])
 		})
 	};
 
-	auto runall([]
+	int val;
+	bool decode{}, quiet{}, verbose{};
+
+	auto runall([&verbose]
 	{
 		for (int ii{}; const auto& [src,vec] : tests)
-			std::cout << ii++ << '\n' << uri{src} << '\n';
+			std::cout << ii++ << '\n' << (verbose ? uri::print_mode::detailed : uri::print_mode::default_mode) << uri{src} << '\n';
 		std::cout << tests.size() << " test cases\n";
 	});
 
-	int val;
-	bool decode{}, quiet{};
 	try
 	{
 		if (argc <= 1)
@@ -94,6 +96,7 @@ int main(int argc, char *argv[])
  -d [uri] parse uri from CLI, show debug output
  -D [uri] parse uri from CLI, show debug output - with normalize
  -h help
+ -V verbose uri output
  -l list tests
  -s show sizes
  -f [file] read and process from file
@@ -103,6 +106,7 @@ int main(int argc, char *argv[])
  -x special tests)" << '\n';
 				return 1;
 			case 'q': quiet ^= true; break;
+			case 'V': verbose ^= true; break;
 			case 'x':
 				break;
 			case 'l':
@@ -113,13 +117,13 @@ int main(int argc, char *argv[])
 				if (const auto tnum {std::stoul(optarg)}; tnum >= tests.size())
 					throw std::range_error("invalid test case");
 				else
-					std::cout << uri_static<1024>{tests[tnum].first};
+					std::cout << (verbose ? uri::print_mode::detailed : uri::print_mode::default_mode) << uri_static<1024>{tests[tnum].first};
 				break;
 			case 't':
 				if (const auto tnum {std::stoul(optarg)}; tnum >= tests.size())
 					throw std::range_error("invalid test case");
 				else
-					std::cout << uri{tests[tnum].first};
+					std::cout << (verbose ? uri::print_mode::detailed : uri::print_mode::default_mode) << uri{tests[tnum].first};
 				break;
 			case 'D':
 				decode = true;
@@ -131,7 +135,7 @@ int main(int argc, char *argv[])
 						u1.normalize();
 					if (!u1)
 						std::cout << "error_t " << static_cast<int>(u1.get_error()) << '\n';
-					std::cout << u1 << "bitset " << std::bitset<uri::countof>(u1.get_present()) << " ("
+					std::cout << (verbose ? uri::print_mode::detailed : uri::print_mode::default_mode) << u1 << "bitset " << std::bitset<uri::countof>(u1.get_present()) << " ("
 						<< std::hex << std::showbase << u1.get_present() << std::dec << std::noshowbase << ")\n";
 					for (uri::component ii{}; ii != uri::countof; ii = uri::component(ii + 1))
 					{
@@ -174,7 +178,7 @@ int main(int argc, char *argv[])
 								err_uris.push_back(std::make_pair(u1.get_error(), std::string{sv}));
 							else if (!quiet)
 							{
-								std::cout << u1 << "bitset " << std::bitset<uri::countof>(u1.get_present()) << " ("
+								std::cout << (verbose ? uri::print_mode::detailed : uri::print_mode::default_mode) << u1 << "bitset " << std::bitset<uri::countof>(u1.get_present()) << " ("
 									<< std::hex << std::showbase << u1.get_present() << std::dec << std::noshowbase << ")\n";
 								for (uri::component ii{}; ii != uri::countof; ii = uri::component(ii + 1))
 								{
@@ -195,7 +199,8 @@ int main(int argc, char *argv[])
 				}
 				break;
 			case 's':
-				std::cout << "uri: " << sizeof(uri) << "\nbasic_uri: " << sizeof(uri_view) << '\n';
+				std::cout << "uri_common: " << sizeof(uri_common) << '\n';
+				std::cout << "uri: " << sizeof(uri) << "\nuri_view: " << sizeof(uri_view) << '\n';
 				std::cout << "uri_static<1024>: " << sizeof(uri_static<1024>) << '\n';
 				break;
 			case 'a':

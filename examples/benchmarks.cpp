@@ -27,9 +27,7 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 // SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //-----------------------------------------------------------------------------------------
-#include <array>
 #include <fix8/uri.hpp>
-
 #include <criterion/criterion.hpp>
 //-----------------------------------------------------------------------------------------
 using namespace FIX8;
@@ -66,7 +64,7 @@ BENCHMARK(uri_static_1000)
 	//SETUP_BENCHMARK()
 
 	for (const auto& pp : uris)
-		[[maybe_unused]] uri_static<> a1{pp};
+		[[maybe_unused]] uri_static a1{pp};
 
 	//TEARDOWN_BENCHMARK()
 }
