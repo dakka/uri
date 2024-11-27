@@ -225,6 +225,7 @@ private:
 	ranges _ranges{};
 
 	static constexpr std::array _component_names { "scheme", "authority", "userinfo", "user", "password", "host", "port", "path", "query", "fragment", };
+	static constexpr std::array _error_strings { "no error", "too long", "illegal chars", "empty src" };
 	static constexpr std::string_view _hexds { "0123456789ABCDEF" }, _reserved { ":/?#[]@!$&'()*+,;=" };
 	static constexpr std::array _default_ports { std::to_array<port_pair>
 	({
@@ -266,7 +267,9 @@ public:
 	}
 
 private:
-	static constexpr bool query_comp(const value_pair& pl, const value_pair& pr) noexcept { return pl.first < pr.first; }
+	template<typename U>
+	static constexpr bool pair_comp(const U& pl, const U& pr) noexcept { return pl.first < pr.first; }
+
 	static constexpr uint32_t ipv4_to_uint32(std::string_view sv)
 	{
 		uint32_t result{};
@@ -366,13 +369,13 @@ public:
 	constexpr range_pair& at() noexcept { return _ranges[what]; }
 
 	constexpr operator bool() const noexcept { return count(); }
-	constexpr error_t get_error() const noexcept
-		{ return has_any() ? error_t::no_error : static_cast<error_t>(_ranges[0].first); }
+	constexpr error_t get_error() const noexcept { return has_any() ? error_t::no_error : static_cast<error_t>(_ranges[0].first); }
 	constexpr void set_error(error_t what) noexcept
 	{
 		if (!has_any())
 			_ranges[0].first = static_cast<uri_len_t>(what);
 	}
+	constexpr std::string_view get_error_string() const noexcept { return _error_strings[static_cast<int>(get_error())]; }
 
 	// syntactic sugar get,add,remove
 #define df(x) \
@@ -669,12 +672,12 @@ private:
 	constexpr std::string make_edit(std::initializer_list<comp_pair> from, bool encode=false) const noexcept
 	{
 		uri_common ibase;
-		std::unordered_map<component, std::string_view> ilmap;
+		comp_list ilmap{countof};
 		for_each([&ibase,&ilmap](comp_pair comp)
 		{
 			const auto [cp, str] { comp };
 			ibase.set(cp);
-			ilmap.emplace(cp, str);
+			ilmap[cp] = str;
 		});
 		for (const auto& [comp,str] : from)
 		{
@@ -688,7 +691,7 @@ private:
 			return {};
 		if (ibase.has_authority())
 		{
-			if (auto itr{ilmap.find(authority)}; itr != ilmap.cend() && itr->second.empty())
+			if (ilmap[static_cast<int>(authority)].empty())
 			{
 				ibase.clear<userinfo>();
 				ibase.clear<authority>();
@@ -696,26 +699,22 @@ private:
 				ibase.set(port);
 				ibase.set(user);
 				ibase.set(password);
-				ilmap[user] = ilmap[password] = ilmap[host] = ilmap[port] = "";
+				ilmap[user] = ilmap[password] = ilmap[host] = ilmap[port] = {};
 			}
 		}
 		if (ibase.has_any_authority())
 			ibase.clear<authority>();
 		if (ibase.has_userinfo() && has_any_userinfo())
 		{
-			if (auto itr{ilmap.find(userinfo)}; itr != ilmap.cend() && itr->second.empty())
+			if (ilmap[static_cast<int>(userinfo)].empty())
 			{
 				ibase.clear<userinfo>();
 				ibase.set(user);
-				ilmap[user] = "";
 				ibase.set(password);
-				ilmap[user] = ilmap[password] = "";
+				ilmap[user] = ilmap[password] = {};
 			}
 		}
-		comp_list ilist{countof};
-		for(const auto& [comp,str] : ilmap)
-			ilist[comp] = str;
-		return make_uri(ibase, std::move(ilist), encode);
+		return make_uri(ibase, std::move(ilmap), encode);
 	}
 
 public:
@@ -737,16 +736,16 @@ public:
 	constexpr uint32_t host_as_ipv4() const noexcept { return host_is_ipv4() ? ipv4_to_uint32(get_host()) : 0; };
 
 	/// static methods --------------------------------------------------------------------------------
-	static constexpr void sort_query(query_result& query) noexcept { std::sort(query.begin(), query.end(), query_comp); }
+	static constexpr void sort_query(query_result& query) noexcept { std::sort(query.begin(), query.end(), pair_comp<value_pair>); }
 	static constexpr std::string_view find_port(std::string_view what) noexcept
 	{
-		const auto result { std::equal_range(_default_ports.cbegin(), _default_ports.cend(), value_pair(what, std::string_view()), query_comp) };
+		const auto result { std::equal_range(_default_ports.cbegin(), _default_ports.cend(), value_pair(what, std::string_view()), pair_comp<port_pair>) };
 		return result.first == result.second ? std::string_view() : result.first->second;
 
 	}
 	static constexpr std::string_view find_query(std::string_view what, const query_result& from) noexcept
 	{
-		const auto result { std::equal_range(from.cbegin(), from.cend(), value_pair(what, std::string_view()), query_comp) };
+		const auto result { std::equal_range(from.cbegin(), from.cend(), value_pair(what, std::string_view()), pair_comp<value_pair>) };
 		return result.first == result.second ? std::string_view() : result.first->second;
 
 	}
@@ -1015,14 +1014,16 @@ protected:
 			case query:
 				if (!str.empty())
 				{
-					result += '?';
+					if (!str.starts_with('?'))
+						result += '?';
 					result += str;
 				}
 				break;
 			case fragment:
 				if (!str.empty())
 				{
-					result += '#';
+					if (!str.starts_with('#'))
+						result += '#';
 					result += str;
 				}
 				break;

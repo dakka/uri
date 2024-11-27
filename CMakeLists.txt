@@ -43,15 +43,24 @@ project (uri
 	VERSION 1.4.0
 )
 
-# to disable building unit tests:
-# cmake -DBUILD_UNITTESTS=false ..
-option(BUILD_UNITTESTS "enable building unit tests" true)
-message("-- Build: unit tests ${BUILD_UNITTESTS}")
-
-# to disable building benchmarking:
-# cmake -DBUILD_BENCHMARKS=false ..
-option(BUILD_BENCHMARKS "enable building benchmarking" true)
-message("-- Build benchmarking: ${BUILD_BENCHMARKS}")
+# to disable an option
+# cmake -DOPTION=false ..
+set(CUSTOM_OPTIONS
+	"BUILD_UNITTESTS:enable building unit tests:true"
+	"BUILD_STATICTEST:enable building statictest:true"
+	"BUILD_BENCHMARKS:enable building benchmarking:true"
+)
+foreach(x ${CUSTOM_OPTIONS})
+	string(REPLACE ":" ";" part ${x})
+	list(GET part 0 option_name)
+	list(GET part 1 option_description)
+	list(GET part 2 option_default)
+	if(NOT DEFINED ${option_name})
+		set(${option_name} ${option_default})
+	endif()
+	option(${option_name} "${option_description}" ${${option_name}})
+	message("-- Build: ${option_description}: ${${option_name}}")
+endforeach()
 
 set(files uritest.cpp)
 
@@ -75,22 +84,33 @@ if(BUILD_UNITTESTS)
 	FetchContent_MakeAvailable(Catch2)
 endif()
 
+if(BUILD_STATICTEST)
+	list(APPEND files statictest.cpp)
+endif()
+
 foreach(x IN LISTS files)
 	cmake_path(GET x STEM LAST_ONLY target)
 	add_executable(${target} examples/${x})
 	set_target_properties(${target} PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED true)
 	target_include_directories(${target} PRIVATE include examples)
-	if(BUILD_BENCHMARKS AND ${target} STREQUAL benchmarks)
+	if(${target} STREQUAL benchmarks)
 		target_link_libraries(${target} PRIVATE Criterion)
 	endif()
-	if(BUILD_UNITTESTS AND ${target} STREQUAL unittests)
+	if(${target} STREQUAL unittests)
 		target_link_libraries(${target} PRIVATE Catch2::Catch2WithMain)
 		include(Catch)
 		enable_testing()
 		catch_discover_tests(${target})
 	endif()
+	if(${target} STREQUAL statictest)
+		if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+			target_compile_options(${target} PRIVATE -fconstexpr-ops-limit=50000000)
+		elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+			target_compile_options(${target} PRIVATE -fconstexpr-depth=50000000 -fconstexpr-steps=50000000)
+		endif()
+	endif()
 	get_target_property(cppstd ${target} CXX_STANDARD)
-	message("-- adding source ${x} (C++${cppstd})")
+	message("-- adding source ${x} (C++${cppstd}, ${CMAKE_CXX_COMPILER_ID})")
 endforeach()
 
 # make include visible to inheriting projects

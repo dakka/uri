@@ -792,3 +792,59 @@ TEST_CASE("copy ctor")
 	REQUIRE(cp2.get_ranges() == u2.get_ranges());
 }
 
+//-----------------------------------------------------------------------------------------
+TEST_CASE("container")
+{
+	constexpr auto tarr
+	{
+		std::to_array<uri_view>
+		({
+			"https://www.blah.com/",
+			"https://www.blah.com",
+			"https://www.blah.com:3000/test",
+			"https://dakka@www.blah.com:3000/",
+			"https://example.com/over/there?name=ferret&time=any#afrag",
+			"https://example.org/./a/../b/./c",
+			"ws://localhost:9229/f46db715-70df-43ad-a359-7f9949f39868",
+			"ldap://[2001:db8::7]/c=GB?objectClass?one",
+			"file:///foo/bar/test/node.js",
+			"http://nodejs.org:89/docs/latest/api/foo/bar/qua/13949281/0f28b/5d49/b3020/url.html"
+				"?payload1=true&payload2=false&test=1&benchmark=3&foo=38.38.011.293"
+				"&bar=1234834910480&test=19299&3992&key=f5c65e1e98fe07e648249ad41e1cfdb0#test",
+			"https://user:password@example.com/path?search=1",
+			"javascript:alert(\"nodeisawesome\");",
+			"https://%E4%BD%A0/foo",
+			"http://你好你好.在",
+			"urn:oasis:names:specification:docbook:dtd:xml",
+			"mailto:John.Smith@example.com",
+			"news:comp.infosystems.www.servers.unix",
+			"tel:+1-816-555-1212",
+			"telnet://user:password@192.0.2.16:8888/",
+			"http://-.~_!$&'()*+,;=:%40:80%2f::::::@example.com",
+			"http://foo.com/blah_blah_(wikipedia)_(again)",
+			"http://उदाहरण.परीक्षा",
+			"http://foo.com/(something)?after=parens",
+			"http://foo.com/unicode_(✪)_in_parens",
+			"http://➡.ws/䨹",
+			"epgm://127.0.0.1;224.0.0.0:11042",
+			"https://!$%25:)(*&^@www.netmeister.org/blog/urls.html",
+			"https://www.netmeister.org/t/h/e/s/e/../../../../../d/i/r/e/c/t/o/"
+				"r/i/e/s/../../../../../../../../../../../d/o/../../n/o/t/../../../e/x/i/s/t/../../../../../blog/urls.html",
+			"https://www.blah.com:/test",
+			"https://www.netmeister.org/%62%6C%6F%67/%75%72%6C%73.%68%74%6D%6C?!@#$%25=+_)(*&^#top%3C",
+			"https://en.wikipedia.org/wiki/C%2B%2B20",
+			"https://www.netmeister.org/%62%63%70/%%4%",
+			"www.hello.com/",
+			"www.hello.com",
+			"http://host.com/?third=3rd&first=1st&second=2nd",
+			"magnet:?xt=urn:btih:08ada5a7a6183aae1e09d831df6748d566095a10&dn=Sintel&tr=udp%3A%2F%2Fexplodie.org%3A6969&tr=udp"
+				"%3A%2F%2Ftracker.coppersurfer.tk%3A6969&tr=udp%3A%2F%2Ftracker.empire-js.us%3A1337&tr=udp%3A%2F%2Ftracker.leechers-paradise.org"
+				"%3A6969&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337&tr=wss%3A%2F%2Ftracker.btorrent.xyz&tr=wss%3A%2F%2Ftracker.fastcast.nz&tr=wss"
+				"%3A%2F%2Ftracker.openwebtorrent.com&ws=https%3A%2F%2Fwebtorrent.io%2Ftorrents%2F&xs=https%3A%2F%2Fwebtorrent.io%2Ftorrents%2Fsintel.torrent",
+		})
+	};
+
+	for (int ii{}; const auto& pp : tarr)
+		REQUIRE(pp.view() == tests[ii++].first);
+}
+
