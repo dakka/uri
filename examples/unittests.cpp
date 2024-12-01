@@ -70,7 +70,6 @@ TEST_CASE("subscript operator")
 }
 
 //-----------------------------------------------------------------------------------------
-/*
 TEST_CASE("bitset")
 {
 	uri u1{tests[0].first};
@@ -79,13 +78,10 @@ TEST_CASE("bitset")
 	REQUIRE(u1.get_present() == 0);
 	u1.set<uri::countof>();
 	REQUIRE(u1.get_present() == 0b1111111111);
-	basic_uri b1{0b1111111111};
-	REQUIRE(b1.get_component(scheme) == "");
-	REQUIRE(b1.get_component(host) == "");
+	uri_base b1{0b1111111111};
 	b1.clear<scheme>();
 	REQUIRE(b1.get_present() == 0b1111111110);
 }
-*/
 
 //-----------------------------------------------------------------------------------------
 TEST_CASE("get name")
@@ -167,9 +163,14 @@ TEST_CASE("uri component validations")
 
 TEST_CASE("uri has/get")
 {
-	for (const auto& [src,vec] : tests)
+	for (int ii{}; const auto& [src,vec] : tests)
 	{
-		const uri_view u1{src};
+		uri_decoded u1{src};
+		for (auto [comp,str] : vec)
+		{
+			INFO("uri(" << ii++ << "): " << src << ", component: " << comp);
+			REQUIRE(u1.test(comp));
+		}
 		REQUIRE(tf(u1, scheme));
 		REQUIRE(tf(u1, authority));
 		REQUIRE(tf(u1, userinfo));
@@ -250,7 +251,7 @@ TEST_CASE("limits")
 	REQUIRE_FALSE(u1);
 	REQUIRE(u1.get_error() == uri::error_t::too_long);
 	uri_static u2{buff}; // too long
-	REQUIRE(u2.get_uri() == "");
+	REQUIRE(u2.view() == "");
 	uri_static<64> u3{tests[35].first};
 	REQUIRE_FALSE(u3);
 }
@@ -299,7 +300,7 @@ TEST_CASE("normalization")
 		REQUIRE(uri(uri::normalize_http_str(before)) == uri(after));
 		uri u1{before};
 		REQUIRE(u1.normalize_http() == before);
-		REQUIRE(u1.get_uri() == after);
+		REQUIRE(u1.view() == after);
 	}
 }
 
@@ -317,7 +318,7 @@ TEST_CASE("normalization_http")
 	{
 		uri u1{pp};
 		u1.normalize_http();
-		REQUIRE(u1.get_uri() == control); // basic_uri equivalence operator
+		REQUIRE(u1.view() == control); // basic_uri equivalence operator
 		uri u2{pp}, u3{control};
 		REQUIRE(u2 % u3); // uri normalize_http equivalence operator
 	}
@@ -389,9 +390,9 @@ TEST_CASE("decode hex")
 	auto result { uri::decode_hex(uris[0]) };
 	REQUIRE_FALSE(uri::has_hex(result));
 	uri u1{result};
-	REQUIRE(u1.get_uri() == uris[1]);
+	REQUIRE(u1.view() == uris[1]);
 	uri_view u2(uris[0]);
-	REQUIRE(uri_view::has_hex(u2.get_uri()));
+	REQUIRE(uri_view::has_hex(u2.view()));
 	REQUIRE(uri::has_hex(uris[3]));
 	REQUIRE(uri::decode_hex(uris[0]) == uri::decode_hex(uris[5]));
 }
@@ -538,27 +539,27 @@ void do_edit()
 {
 	T u1 { "https://dakka@www.blah.com:3000/" };
 	u1.edit({{port, "80"}, {user, ""}, {path, "/newpath"}});
-	REQUIRE(u1.get_uri() == "https://www.blah.com:80/newpath");
+	REQUIRE(u1.view() == "https://www.blah.com:80/newpath");
 
 	T u2 { "file:///foo/bar/test/node.js" };
 	u2.edit({{scheme, "mms"}, {fragment, "bookmark1"}});
-	REQUIRE(u2.get_uri() == "mms:///foo/bar/test/node.js#bookmark1");
+	REQUIRE(u2.view() == "mms:///foo/bar/test/node.js#bookmark1");
 
 	T u3 { "https://user:password@example.com/?search=1" };
 	u3.edit({{port, "80"}, {user, "dakka"}, {password, ""}, {path, "/newpath"}});
-	REQUIRE(u3.get_uri() == "https://dakka@example.com:80/newpath?search=1");
+	REQUIRE(u3.view() == "https://dakka@example.com:80/newpath?search=1");
 
 	T u6 { "https://dakka:pass123@example.com/?search=1" };
 	u6.edit({{user, ""}, {password, ""}});
-	REQUIRE(u6.get_uri() == "https://example.com/?search=1");
+	REQUIRE(u6.view() == "https://example.com/?search=1");
 
 	T u4 { "https://dakka:pass123@example.com/?search=1" };
 	u4.edit({{userinfo, ""}});
-	REQUIRE(u4.get_uri() == "https://example.com/?search=1");
+	REQUIRE(u4.view() == "https://example.com/?search=1");
 
 	T u5 { "https://user@example.com/?search=1" };
 	u5.edit({{port, "80"}, {userinfo, ""}});
-	REQUIRE(u5.get_uri() == "https://example.com:80/?search=1");
+	REQUIRE(u5.view() == "https://example.com:80/?search=1");
 }
 
 TEST_CASE("edit")
@@ -575,31 +576,31 @@ void do_add()
 
 	T u1 { "https://dakka@www.blah.com:3000/" };
 	u1.add_path("/newpath");
-	REQUIRE(u1.get_uri() == "https://dakka@www.blah.com:3000/newpath");
+	REQUIRE(u1.view() == "https://dakka@www.blah.com:3000/newpath");
 
 	T u2 { "https://example.com/" };
 	u2.add_fragment("hello");
-	REQUIRE(u2.get_uri() == "https://example.com/#hello");
+	REQUIRE(u2.view() == "https://example.com/#hello");
 
 	T u3 { "https://example.com/" };
 	u3.add_query(tbl);
-	REQUIRE(u3.get_uri() == "https://example.com/?first=1st&second=2nd&third=3rd");
+	REQUIRE(u3.view() == "https://example.com/?first=1st&second=2nd&third=3rd");
 
 	T u5 { "https://example.com/" };
 	u5.template add_query<';'>(tbl);
-	REQUIRE(u5.get_uri() == "https://example.com/?first=1st;second=2nd;third=3rd");
+	REQUIRE(u5.view() == "https://example.com/?first=1st;second=2nd;third=3rd");
 
 	T u7 { "https://example.com/" };
 	u7.add_query("first=1st&second=2nd&third=3rd");
-	REQUIRE(u7.get_uri() == "https://example.com/?first=1st&second=2nd&third=3rd");
+	REQUIRE(u7.view() == "https://example.com/?first=1st&second=2nd&third=3rd");
 
 	T u4 { "https://example.com/?search=1" };
 	u4.add_userinfo("dakka:pass123@");
-	REQUIRE(u4.get_uri() == "https://dakka:pass123@example.com/?search=1");
+	REQUIRE(u4.view() == "https://dakka:pass123@example.com/?search=1");
 
 	T u6 { "https://example.com/" };
 	u6.add_path("this+way home", true); // encode
-	REQUIRE(u6.get_uri() == "https://example.com/this%2Bway%20home");
+	REQUIRE(u6.view() == "https://example.com/this%2Bway%20home");
 }
 
 TEST_CASE("add")
@@ -614,25 +615,25 @@ void do_remove()
 {
 	T u1 { "https://dakka@www.blah.com:3000/newpath" };
 	u1.remove_port();
-	REQUIRE(u1.get_uri() == "https://dakka@www.blah.com/newpath");
+	REQUIRE(u1.view() == "https://dakka@www.blah.com/newpath");
 
 	T u4 { "https://dakka:pass123@example.com/?search=1" };
 	u4.remove_userinfo();
-	REQUIRE(u4.get_uri() == "https://example.com/?search=1");
+	REQUIRE(u4.view() == "https://example.com/?search=1");
 
 	T u6 { "https://dakka:pass123@example.com/?search=1" };
 	u6.remove_scheme();
-	REQUIRE(u6.get_uri() == "dakka:pass123@example.com/?search=1");
+	REQUIRE(u6.view() == "dakka:pass123@example.com/?search=1");
 
 	T u5 { "https://dakka:pass123@example.com/?search=1" };
 	u5.remove_authority();
-	REQUIRE(u5.get_uri() == "https:///?search=1");
+	REQUIRE(u5.view() == "https:///?search=1");
 	u5.remove_scheme();
-	REQUIRE(u5.get_uri() == "/?search=1");
+	REQUIRE(u5.view() == "/?search=1");
 
 	T u7 { "https://dakka@www.blah.com:3000/newpath/subdir" };
 	u7.remove_path();
-	REQUIRE(u7.get_uri() == "https://dakka@www.blah.com:3000");
+	REQUIRE(u7.view() == "https://dakka@www.blah.com:3000");
 };
 
 TEST_CASE("remove")
@@ -846,5 +847,28 @@ TEST_CASE("container")
 
 	for (int ii{}; const auto& pp : tarr)
 		REQUIRE(pp.view() == tests[ii++].first);
+}
+
+//-----------------------------------------------------------------------------------------
+TEST_CASE("uri_decoded")
+{
+	uri_decoded u1{"https://example.com/query%3Fvalue%3D42"};
+	REQUIRE(u1.view() == "https://example.com/query?value=42");
+	uri_static_decoded u2{"https://example.com/some%20path%3Fwith%20%26special%24chars"};
+	REQUIRE(u2.view() == "https://example.com/some path?with &special$chars");
+	uri_view u3{u1};
+	REQUIRE(u3.view() == "https://example.com/query?value=42");
+}
+
+//-----------------------------------------------------------------------------------------
+TEST_CASE("operator=,==")
+{
+	uri_view u1{"https://example.com/thispath"};
+	uri_view u2;
+	u2 = u1;
+	REQUIRE(u1 == u2);
+	constexpr uri_fixed u3{"https://dakka@www.blah.com:3000/"};
+	u2 = u3;
+	REQUIRE(u3 == u2);
 }
 

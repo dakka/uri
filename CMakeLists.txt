@@ -36,52 +36,33 @@
 # min cmake version 3.20 (Mar 24, 2021)
 # ----------------------------------------------------------------------------------------
 cmake_minimum_required (VERSION 3.20)
-project (uri
+include(cmake/buildutils.cmake)
+project(uri
 	LANGUAGES CXX
 	HOMEPAGE_URL https://github.com/fix8mt/${PROJECT_NAME}
 	DESCRIPTION "Lightweight header-only C++20 URI parser"
 	VERSION 1.4.0
 )
 
-# to disable an option
-# cmake -DOPTION=false ..
-set(CUSTOM_OPTIONS
-	"BUILD_UNITTESTS:enable building unit tests:true"
-	"BUILD_STATICTEST:enable building statictest:true"
-	"BUILD_BENCHMARKS:enable building benchmarking:true"
-)
-foreach(x ${CUSTOM_OPTIONS})
-	string(REPLACE ":" ";" part ${x})
-	list(GET part 0 option_name)
-	list(GET part 1 option_description)
-	list(GET part 2 option_default)
-	if(NOT DEFINED ${option_name})
-		set(${option_name} ${option_default})
-	endif()
-	option(${option_name} "${option_description}" ${${option_name}})
-	message("-- Build: ${option_description}: ${${option_name}}")
-endforeach()
+fix8_setbuildtype(FIX8 Release)
+fix8_addoption("BUILD_UNITTESTS|enable building unit tests|true")
+fix8_addoption("BUILD_STATICTEST|enable building statictest|true")
+fix8_addoption("BUILD_BENCHMARKS|enable building benchmarking|true")
 
 set(files uritest.cpp)
 
 if(BUILD_BENCHMARKS)
-	include(FetchContent)
 	list(APPEND files benchmarks.cpp)
-	message(STATUS "Downloading Criterion...")
-	FetchContent_Declare(Criterion GIT_REPOSITORY https://github.com/p-ranav/criterion.git GIT_SHALLOW	ON)
-	FetchContent_MakeAvailable(Criterion)
+	fix8_fetch(Criterion p-ranav/criterion master)
 	if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 		target_compile_options(Criterion INTERFACE -fbracket-depth=257)
 	endif()
 endif()
 
 if(BUILD_UNITTESTS)
-	include(FetchContent)
 	list(APPEND files unittests.cpp)
 	list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
-	message(STATUS "Downloading Catch2...")
-	FetchContent_Declare(Catch2 GIT_REPOSITORY https://github.com/catchorg/Catch2.git GIT_SHALLOW ON GIT_TAG devel)
-	FetchContent_MakeAvailable(Catch2)
+	fix8_fetch(Catch2 catchorg/Catch2 devel)
 endif()
 
 if(BUILD_STATICTEST)

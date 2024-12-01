@@ -46,28 +46,32 @@ using namespace std::literals::string_view_literals;
 #include <uriexamples.hpp>
 
 //-----------------------------------------------------------------------------------------
+void do_interactive();
+
+//-----------------------------------------------------------------------------------------
 int main(int argc, char *argv[])
 {
-   static constexpr const char *optstr{"t:T:d:hlasxf:F:D:qV"};
+   static constexpr const char *optstr{"t:T:d:hlasxf:iF:D:qV"};
 	static constexpr auto long_options
 	{
 		std::to_array<option>
 		({
-			{ "help",	no_argument,			nullptr, 'h' },
-			{ "verbose",no_argument,			nullptr, 'V' },
-			{ "list",	no_argument,			nullptr, 'l' },
-			{ "sizes",	no_argument,			nullptr, '2' },
-			{ "all",		no_argument,			nullptr, 'a' },
-			{ "file",	required_argument,	nullptr, 'f' },
-			{ "dump",	required_argument,	nullptr, 'd' },
-			{ "test",	required_argument,	nullptr, 't' },
-			{ "stat",	required_argument,	nullptr, 'T' },
+			{ "help",			no_argument,			nullptr, 'h' },
+			{ "verbose",		no_argument,			nullptr, 'V' },
+			{ "list",			no_argument,			nullptr, 'l' },
+			{ "sizes",			no_argument,			nullptr, '2' },
+			{ "all",				no_argument,			nullptr, 'a' },
+			{ "interactive",	no_argument,			nullptr, 'i' },
+			{ "file",			required_argument,	nullptr, 'f' },
+			{ "dump",			required_argument,	nullptr, 'd' },
+			{ "test",			required_argument,	nullptr, 't' },
+			{ "stat",			required_argument,	nullptr, 'T' },
 			{}
 		})
 	};
 
 	int val;
-	bool decode{}, quiet{}, verbose{};
+	bool decode{}, quiet{}, verbose{}, interactive{};
 
 	auto runall([&verbose]
 	{
@@ -96,6 +100,7 @@ int main(int argc, char *argv[])
  -d [uri] parse uri from CLI, show debug output
  -D [uri] parse uri from CLI, show debug output - with normalize
  -h help
+ -i interactive mode
  -V verbose uri output
  -l list tests
  -s show sizes
@@ -107,6 +112,7 @@ int main(int argc, char *argv[])
 				return 1;
 			case 'q': quiet ^= true; break;
 			case 'V': verbose ^= true; break;
+			case 'i': interactive ^= true; break;
 			case 'x':
 				break;
 			case 'l':
@@ -126,11 +132,26 @@ int main(int argc, char *argv[])
 					std::cout << (verbose ? uri::print_mode::detailed : uri::print_mode::default_mode) << uri{tests[tnum].first};
 				break;
 			case 'D':
-				decode = true;
-				[[fallthrough]];
+				{
+					uri_decoded u1{std::string(optarg)};
+					u1.normalize();
+					if (!u1)
+						std::cout << "error_t " << static_cast<int>(u1.get_error()) << '\n';
+					std::cout << (verbose ? uri::print_mode::detailed : uri::print_mode::default_mode) << u1 << "bitset " << std::bitset<uri::countof>(u1.get_present()) << " ("
+						<< std::hex << std::showbase << u1.get_present() << std::dec << std::noshowbase << ")\n";
+					for (uri::component ii{}; ii != uri::countof; ii = uri::component(ii + 1))
+					{
+						if (u1.test(ii))
+						{
+							const auto [pos,len] { u1[ii] };
+							std::cout << uri::get_name(ii) << ' ' << pos << " (" << len << ")\n";
+						}
+					}
+				}
+				break;
 			case 'd':
 				{
-					uri u1{decode ? uri::encode_hex_spaces(optarg) : std::string(optarg)};
+					uri u1{std::string(optarg)};
 					if (decode)
 						u1.normalize();
 					if (!u1)
@@ -171,7 +192,8 @@ int main(int argc, char *argv[])
 							if (sv.ends_with(R"(",)"))
 								sv.remove_suffix(2);
 							*/
-							uri u1{decode ? uri::encode_hex_spaces(sv) : sv};
+							//uri u1{decode ? uri::encode_hex_spaces(sv) : sv};
+							uri u1{sv};
 							if (decode)
 								u1.normalize();
 							if (!u1)
@@ -199,7 +221,7 @@ int main(int argc, char *argv[])
 				}
 				break;
 			case 's':
-				std::cout << "uri_common: " << sizeof(uri_common) << '\n';
+				std::cout << "uri_base: " << sizeof(uri_base) << '\n';
 				std::cout << "uri: " << sizeof(uri) << "\nuri_view: " << sizeof(uri_view) << '\n';
 				std::cout << "uri_static<1024>: " << sizeof(uri_static<1024>) << '\n';
 				break;
@@ -210,6 +232,8 @@ int main(int argc, char *argv[])
 				break;
 			}
 		}
+		if (interactive)
+			do_interactive();
 		while(optind < argc)
 			std::cout << uri{argv[optind++]} << '\n';
 	}
@@ -222,5 +246,18 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 	return 0;
+}
+
+//-----------------------------------------------------------------------------------------
+void do_interactive()
+{
+	for (std::string name;;)
+	{
+		std::cout << "Enter URI: ";
+		std::getline(std::cin, name);
+		if (name[0] == 'q')
+			break;
+		std::cout << '\n' << uri::print_mode::detailed << uri_view(uri::decode_hex(name)) << '\n';
+	}
 }
 
