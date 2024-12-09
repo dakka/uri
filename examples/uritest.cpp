@@ -59,7 +59,7 @@ int main(int argc, char *argv[])
 			{ "help",			no_argument,			nullptr, 'h' },
 			{ "verbose",		no_argument,			nullptr, 'V' },
 			{ "list",			no_argument,			nullptr, 'l' },
-			{ "sizes",			no_argument,			nullptr, '2' },
+			{ "sizes",			no_argument,			nullptr, 's' },
 			{ "all",				no_argument,			nullptr, 'a' },
 			{ "interactive",	no_argument,			nullptr, 'i' },
 			{ "file",			required_argument,	nullptr, 'f' },
@@ -221,7 +221,7 @@ int main(int argc, char *argv[])
 				}
 				break;
 			case 's':
-				std::cout << "uri_base: " << sizeof(uri_base) << '\n';
+				std::cout << "uri_bitset: " << sizeof(uri_bitset) << '\n';
 				std::cout << "uri: " << sizeof(uri) << "\nuri_view: " << sizeof(uri_view) << '\n';
 				std::cout << "uri_static<1024>: " << sizeof(uri_static<1024>) << '\n';
 				break;

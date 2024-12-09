@@ -78,7 +78,7 @@ TEST_CASE("bitset")
 	REQUIRE(u1.get_present() == 0);
 	u1.set<uri::countof>();
 	REQUIRE(u1.get_present() == 0b1111111111);
-	uri_base b1{0b1111111111};
+	uri_bitset b1{0b1111111111};
 	b1.clear<scheme>();
 	REQUIRE(b1.get_present() == 0b1111111110);
 }
@@ -867,7 +867,7 @@ TEST_CASE("operator=,==")
 	uri_view u2;
 	u2 = u1;
 	REQUIRE(u1 == u2);
-	constexpr uri_fixed u3{"https://dakka@www.blah.com:3000/"};
+	static constexpr uri_fixed u3{"https://dakka@www.blah.com:3000/"};
 	u2 = u3;
 	REQUIRE(u3 == u2);
 }

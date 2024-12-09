@@ -111,7 +111,7 @@ template <typename T>
 concept is_mutable = requires(T a) { { a[0] = 'c' }; };
 
 //-----------------------------------------------------------------------------------------
-struct uri_base
+struct uri_bitset
 {
 	std::uint16_t _present{};
 
@@ -127,64 +127,64 @@ struct uri_base
 
 	static constexpr int all_components {(1 << countof) - 1};
 	static constexpr auto uri_max_len {std::numeric_limits<uri_len_t>::max()};
-	constexpr int count() const NOEXCEPT { return std::popcount(_present); } // upgrade to std::bitset when constexpr in c++23
-	constexpr std::uint16_t get_present() const NOEXCEPT { return _present; }
-	constexpr void set(component what) NOEXCEPT
+	constexpr int count() const noexcept { return std::popcount(_present); } // upgrade to std::bitset when constexpr in c++23
+	constexpr std::uint16_t get_present() const noexcept { return _present; }
+	constexpr void set(component what) noexcept
 		{ what == countof ? _present = all_components : _present |= (1 << what); }
 
 	template<component what>
-	constexpr void set() NOEXCEPT
+	constexpr void set() noexcept
 	{
 		if constexpr (what < countof)
 			_present |= (1 << what);
 		else
 			_present = all_components;
 	}
-	constexpr void clear(component what) NOEXCEPT { what == countof ? _present = 0 : _present &= ~(1 << what); }
+	constexpr void clear(component what) noexcept { what == countof ? _present = 0 : _present &= ~(1 << what); }
 
 	template<component what>
-	constexpr void clear() NOEXCEPT
+	constexpr void clear() noexcept
 	{
 		if constexpr (what < countof)
 			_present &= ~(1 << what);
 		else
 			_present = 0;
 	}
-	constexpr bool test(component what) const NOEXCEPT { return _present & (1 << what); }
+	constexpr bool test(component what) const noexcept { return _present & (1 << what); }
 
 	template<component what>
-	constexpr bool test() const NOEXCEPT { return _present & (1 << what); }
+	constexpr bool test() const noexcept { return _present & (1 << what); }
 
 	template<component... comp>
-	constexpr int test_any() const NOEXCEPT { return (... || test<comp>()); }
+	constexpr int test_any() const noexcept { return (... || test<comp>()); }
 
 	template<component... comp>
-	constexpr int test_all() const NOEXCEPT { return (... && test<comp>()); }
+	constexpr int test_all() const noexcept { return (... && test<comp>()); }
 
 	template<component... comp>
-	constexpr void set_all() NOEXCEPT { (set<comp>(),...); }
+	constexpr void set_all() noexcept { (set<comp>(),...); }
 
 	template<component... comp>
-	constexpr void clear_all() NOEXCEPT { (clear<comp>(),...); }
+	constexpr void clear_all() noexcept { (clear<comp>(),...); }
 
-	constexpr bool has_any() const NOEXCEPT { return _present; }
-	constexpr bool has_any_authority() const NOEXCEPT { return test_any<host,password,port,user,userinfo>(); }
-	constexpr bool has_any_userinfo() const NOEXCEPT { return test_any<password,user>(); }
+	constexpr bool has_any() const noexcept { return _present; }
+	constexpr bool has_any_authority() const noexcept { return test_any<host,password,port,user,userinfo>(); }
+	constexpr bool has_any_userinfo() const noexcept { return test_any<password,user>(); }
 
 	// syntactic sugar has
 #define df(x) \
-	constexpr bool has_##x() const NOEXCEPT { return test<x>(); }
+	constexpr bool has_##x() const noexcept { return test<x>(); }
 	df(scheme); df(authority); df(userinfo); df(user); df(password); df(host); df(port); df(path); df(query); df(fragment);
 #undef df
 
 	template<typename... Comp>
-	static constexpr int bitsum(Comp... comp) NOEXCEPT { return (... | (1 << comp)); }
+	static constexpr int bitsum(Comp... comp) noexcept { return (... | (1 << comp)); }
 
 	template<component... comp>
-	static constexpr int bitsum() NOEXCEPT { return (... | (1 << comp)); }
+	static constexpr int bitsum() noexcept { return (... | (1 << comp)); }
 
 	template<component what>
-	static constexpr bool has_bit(auto totest) NOEXCEPT
+	static constexpr bool has_bit(auto totest) noexcept
 	{
 		if constexpr (what < countof)
 			return totest & (1 << what);
@@ -202,7 +202,7 @@ inline int get_print_mode_index()
 
 //-----------------------------------------------------------------------------------------
 template<typename T, bool default_decode=false>
-class basic_uri : public uri_base
+class basic_uri : public uri_bitset
 {
 public:
 	using range_pair = std::pair<uri_len_t, uri_len_t>; // offset, len
@@ -262,7 +262,7 @@ public:
 	constexpr const ranges& get_ranges() const NOEXCEPT { return _ranges; }
    constexpr const char *data() const NOEXCEPT { return _source.data(); }
    constexpr auto size() const NOEXCEPT { return _source.size(); }
-	constexpr int assign(T src) NOEXCEPT requires is_mutable<T>
+	constexpr int assign(T src) NOEXCEPT requires (is_mutable<T> || std::same_as<T, std::string_view>)
 	{
 		_source = src;
 		clear<countof>();
@@ -509,7 +509,9 @@ private:
 
 			if (auto prt { svsrc.find_first_of(':', pos) }; prt != std::string_view::npos)
 			{
-				if (auto autstr {get_component<authority>()}; autstr.front() != '[' && autstr.back() != ']')
+				if (const auto qur {svsrc.find_first_of('?', pos)}; qur != std::string_view::npos && qur < prt) // ':' in query
+					;
+				else if (auto autstr {get_component<authority>()}; autstr.front() != '[' && autstr.back() != ']')
 				{
 					++prt;
 					if (svsrc.size() - prt > 0)
@@ -569,7 +571,7 @@ private:
 	{
 		if (disp.empty())
 			return 0;
-		uri_base done;
+		uri_bitset done;
 		int called{};
 		for (const auto& [comp,func] : disp)
 		{
@@ -602,7 +604,7 @@ private:
 
 	constexpr std::string make_edit(std::initializer_list<comp_pair> from, bool encode=false) const NOEXCEPT
 	{
-		uri_base ibase;
+		uri_bitset ibase;
 		comp_list ilmap{countof};
 		for_each([&ibase,&ilmap](auto comp) NOEXCEPT
 		{
@@ -925,7 +927,7 @@ public:
 private:
 	static constexpr std::string make_uri(std::initializer_list<comp_pair> from, bool encode=false) NOEXCEPT
 	{
-		uri_base ibase;
+		uri_bitset ibase;
 		comp_list ilist{countof};
 		for (const auto& [comp,str] : from)
 		{
@@ -938,12 +940,12 @@ private:
 		return make_uri(ibase, std::move(ilist), encode);
 	}
 
-	static constexpr std::string make_uri(uri_base ibase, comp_list ilist, bool encode=false) NOEXCEPT
+	static constexpr std::string make_uri(uri_bitset ibase, comp_list ilist, bool encode=false) NOEXCEPT
 	{
 		if (!ibase.has_any())
 			return {};
 		using namespace std::literals::string_view_literals;
-		uri_base done;
+		uri_bitset done;
 		std::string result;
 		for (component ii{}; ii != countof; ii = component(ii + 1))
 		{
